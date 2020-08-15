@@ -1,0 +1,12 @@
+Enfin un truc avec des sockets qui marche en Python!
+
+Pour le faire fonctionner, j'ai du installer manuellement tous les packages de
+requirements.txt avec pip. Autrement, runner runserver nous faisait tomber dans une boucle infinie sans que le serveur ne soit accessible.
+
+Pour que python-socketio fonctionne, il a fallu desinstaller gevent-socketio,
+qui ne marchait pas de toute facon (du moins, pas dans
+EssaiDjango/chat_socket).
+
+Pour que le tout fonctionne dans un nouveau projet nommé YuGiOhOnline1, il a
+fallu modifier le contenu de management/commands/runserver ainsi que --ce fut
+le point tournant-- YuGiOhOnline1/wsgi.

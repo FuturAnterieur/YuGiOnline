@@ -1,0 +1,42 @@
+<!DOCTYPE HTML>
+
+{% extends "socketio_app/base.html" %}
+{% block scripts %}
+{% load static %}
+<script type="text/javascript" charset="utf-8">
+$(document).ready(function(){
+	var socket = io.connect();
+	const roomsElement = document.getElementById("text_space");
+	roomsElement.innerHTML = "Loading...";
+
+	socket.on('create_text_response', function(msg) {
+		$('#text_space').append('<br>' + msg.data);
+	});
+
+	$('form#create').submit(function(event) {
+		socket.emit('create_text_event', {data: $('#create_data').val()});
+		return false;
+	});	
+});	
+</script> 
+{% endblock %}
+{% block body-classes %}
+<div id='text_space'>
+	Replace me <br> added text	
+</div>
+
+<form id="create" method="POST" action='#'>
+	<!-- {% csrf_token %} -->	
+        <input type="text" name="create_data" id="create_data">
+        <input type="submit" value="Add text to this page">
+    </form>
+
+    <!-- <button type="button" onclick="myFunction()">Try it</button> -->
+
+<li><a class="big-btn" href="{% url 'socketio_app:new_duel' %}">Create new duel</a></li>
+
+<img src='{% static 'socketio_app/images/back_cover.jpg' %}'>
+
+{% endblock %}
+
+

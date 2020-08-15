@@ -1,0 +1,22 @@
+{% extends 'socketio_app/base.html' %}
+
+{% block scripts %}
+
+{% endblock %}
+
+
+
+{% block body-classes %}
+<p> This is the duel lobby. Share this number with your friends : {{ duel.duel_url }} </p>
+
+{% if error_message %}<p><strong>{{ error_message }}</strong></p>{% endif %}
+
+<form action="{% url 'socketio_app:enter_duel_room' duel.duel_url %}" method="post">
+	{% csrf_token %}
+	<input type="text" name="nickname" id="nickname" placeholder="Nickname">
+	<input type="submit" value="Join As Player">
+</form>
+
+<a href="{% url 'socketio_app:duel_room' duel.duel_url  %}?player_id=SPECTATOR"><div>Join as Spectator</div></a>
+
+{% endblock %}
