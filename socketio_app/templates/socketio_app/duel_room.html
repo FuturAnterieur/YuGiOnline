@@ -668,6 +668,13 @@ var CardManager = {
 	$('#message').text("");
 	$('#choice_buttons').html("");
 
+    },
+    passAction : function()
+    {
+	this.socket.emit('pass_action',  {pnum: this.clientNo, duelid: this.duelid});
+	$('#message').text("");
+	$('#choice_buttons').html("");
+
     }
 }
 
@@ -695,7 +702,6 @@ var myGameArea = {
     checkClickEvent : function(epageX, epageY, clickOrUnclick) {
 		if (CardManager.clickMode == 0)
 		{
-		    CardManager.checkClickPhaseButton(epageX, epageY, clickOrUnclick);
 		    CardManager.checkClickCard(epageX, epageY, clickOrUnclick);
 		}
 		else if (CardManager.clickMode == 1)
@@ -705,6 +711,10 @@ var myGameArea = {
 		else if (CardManager.clickMode == 2)
 		{
 		    CardManager.checkClickCard(epageX, epageY, clickOrUnclick);
+		}
+		else if (CardManager.clickMode == 3)
+		{
+		    CardManager.checkClickPhaseButton(epageX, epageY, clickOrUnclick);
 		}
 
     },
@@ -987,6 +997,7 @@ $(document).ready(function(){
 		CardManager.cachedClickMode = CardManager.clickMode;
 		CardManager.clickMode = -1;
 		$("#message").text(msg.reason + " : waiting for other player to respond.");
+		$("#choice_buttons").html("");
 	});
 
 	socket.on('stop_waiting', function(msg) {
@@ -1009,11 +1020,27 @@ $(document).ready(function(){
 		$("#choice_buttons").html(html_buttons);
 		for(var i = 0; i < choices.length; i++)
 		{
-			$("#btn" + i).click(function() {
-				CardManager.sendAnswer(msg.question, $(this).text() );
-			});
+		    $("#btn" + i).click(function() {
+			CardManager.sendAnswer(msg.question, $(this).text() );
+		    });
 		}
-
+	});
+	socket.on('choose_next_phase', function(msg) {
+		CardManager.clickMode = 3;
+		$("#message").text("Choose the next phase");
+	
+	});
+			       
+	socket.on('multiple_action_window', function(msg) {
+	    CardManager.cachedClickMode = 0;
+            CardManager.clickMode = 0;
+	    
+	    $("#message").text(msg.current_phase_or_step + " : Launch actions");
+	    button_html = "<button id=\"Pass\">Pass</button>";
+	    $("#choice_buttons").html(button_html);
+	    $("#Pass").click(function() {
+		CardManager.passAction();		       
+	    });	       	
 	});
 
 
@@ -1025,8 +1052,8 @@ $(document).ready(function(){
 
 {% endblock %}
 {% block body-classes %}
-<p> This is the duel room for duel number {{ duel.duel_url }}. </p>
-<p> You are player {{ player_number }}, with nickname {{ player_nickname }}. </p>
+<!-- <p> This is the duel room for duel number {{ duel.duel_url }}. </p>
+<p> You are player {{ player_number }}, with nickname {{ player_nickname }}. </p> -->
 
 <p id="message"></p>
 <p id="choice_buttons"></p>

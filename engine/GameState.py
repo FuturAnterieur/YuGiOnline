@@ -16,7 +16,10 @@ class Phase:
             func()
 
 class TriggerEvent:
-    def __init__(self, name, matches):
+    def __init__(self, name, card, effect, triggertype, category, matches):
+        self.card = card
+        self.type = triggertype
+        self.category = category
         self.name = name
         self.matches = matches
         self.funclist = []
@@ -24,6 +27,16 @@ class TriggerEvent:
     def execute(self, gamestate):
         for func in self.funclist:
             func(gamestate)
+
+    def can_be_chained_now(self, gamestate): 
+        if gamestate.is_building_a_chain == False:
+            return False
+        
+        if gamestate.curspellspeed <= 1:
+            return self.effect.spellspeed > gamestate.curspellspeed 
+
+        elif gamestate.curspellspeed > 1:
+            return self.effect.spellspeed >= gamestate.curspellspeed
 
 class GameState:
     def __init__(self, firstplayer, otherplayer, sio, duel_id):
@@ -46,11 +59,14 @@ class GameState:
 
         self.normalsummonscounter = 0 #for the current turn
         self.lastaction = ""
+
+
+        self.curphase = "None"
         self.battlephasebegan = False
         self.battlephaseended = False
         self.inbattlephase = False
         self.indamagestep = False
-        self.insummonresponsewindow = None
+        
         self.insummonnegationwindow = None
         
         self.inresponsewindow = None #response window for optional when-triggers
@@ -60,8 +76,9 @@ class GameState:
         self.action_stack = []
         self.outer_action_stack_level = 0
 
-        self.chained_effects_stack = []
+        
         self.chainlinks = []
+        self.cards_chain_sends_to_graveyard = []
         self.record_LRA = True
         self.lastresolvedactions = [] 
         
@@ -69,7 +86,10 @@ class GameState:
         self.answer_arg_name = None
 
         self.step_waiting_for_answer = None
+        self.waiting_for_one_action_choice = False
         self.player_to_stop_waiting_when_run_action = None
+
+        self.player_in_multiple_action_window = None
 
         self.bannedactions = set()
         self.monstersthatattackedthisturn = []
@@ -91,27 +111,10 @@ class GameState:
 
         self.phase_transition_asked_funcs = {'battle_phase' : self.set_battle_phase, 'main_phase_2' : self.set_main_phase_2,
                 'end_phase' : self.set_end_phase}
-        #this DestroyCardTest trigger event is a prototype of what would appear in if-triggered effects
         
-        def TestMatchFunc(action, gamestate):
-            return action.name == "Destroy Card" and action.card.cardclass == "Monster"
-
-        def DeclareMonsterDestroyed(gamestate):
-            print("A monster was destroyed!")
-
-        DestroyCardTestTriggerEvent = TriggerEvent("DCTest", TestMatchFunc)
-        DestroyCardTestTriggerEvent.funclist.append(DeclareMonsterDestroyed)
-        """
-        def TestMatchFunc2(action):
-            return action.name == "Normal Summon Monster" and action.card.ID == 5
-
-        def DeclareBogusMonsterSummoned(gamestate):
-            print("Bogus Monster 1 was summoned!")
-
-        SummonBMTriggerEvent = TriggerEvent("SBMTest", TestMatchFunc2)
-        SummonBMTriggerEvent.funclist.append(DeclareBogusMonsterSummoned)
-        """
         self.if_triggers = []
+        self.is_building_a_chain = False
+
         self.when_triggers = []
         self.immediate_triggers = []
     
@@ -122,9 +125,7 @@ class GameState:
 
         self.chainable_optional_when_triggers = { 'VTP' : [], 'ITP' : [], 'VOP' : [], 'IOP' : [] }
 
-        
-
-        self.triggerevents = [DestroyCardTestTriggerEvent]
+        self.triggerevents = []
 
         firstplayer.init_card_actions_and_effects(self)
         otherplayer.init_card_actions_and_effects(self)
@@ -132,11 +133,6 @@ class GameState:
         #self.overridable_actions = {"tribute_monster" : tribute_monster, "draw_card" : draw_card}
 
         #self.overridable_checks = {"normal_summon_requirements" : normal_summon_requirements}
-        
-
-    def clear_lra_if_at_no_triggers(self): #unused from July 20th
-        if self.simultaneitycounter == 0:
-            self.lastresolvedactions.clear()
 
     def startup(self):
         self.has_started = True
@@ -147,6 +143,12 @@ class GameState:
         self.steps_to_do.append(engine.HaltableStep.RunDrawPhase())
         self.steps_to_do.append(engine.HaltableStep.RunStandbyPhase())
         self.steps_to_do.append(engine.HaltableStep.SetMainPhase1())
+        self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(self.turnplayer, 'main_phase_1'))
+        self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(self.otherplayer, 'main_phase_1'))
+        self.steps_to_do.append(engine.HaltableStep.LetTurnPlayerChooseNextPhase()) #ClickMode 0 won't allow Phase Buttons
+        #They will be reserved for this step and ClickMode 3
+
+        self.keep_running_steps = True
         self.run_steps();
 
     def phase_transition(self, phase_name):
@@ -177,6 +179,10 @@ class GameState:
         self.phase_transition('battle_phase')
         self.battlephasebegan = True
         self.inbattlephase = True
+        
+        self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(self.turnplayer, 'battle_phase_start_step'))
+        self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(self.otherplayer, 'battle_phase_start_step'))
+        self.steps_to_do.append(engine.HaltableStep.SetBattleStep())
 
     def set_main_phase_2(self):
         self.phase_transition('main_phase_2')
@@ -201,12 +207,20 @@ class GameState:
 
     def run_action_asked_for(self, cardId, action_name):
         if (self.player_to_stop_waiting_when_run_action is not None):
+
+            if_trigger_cat_to_clear = 'OTP' if self.player_to_stop_waiting_when_run_action.other == self.turnplayer else 'OOP'
+
+            engine.HaltableStep.clear_chainable_if_triggers(self, if_trigger_cat_to_clear)
+            engine.HaltableStep.clear_chainable_when_triggers(self)
+
             waiting_player = self.player_to_stop_waiting_when_run_action
             self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
             self.player_to_stop_waiting_when_run_action = None
 
-        self.lastresolvedactions.clear()
+            self.keep_running_steps = True
 
+        #self.lastresolvedactions.clear() #i don't think this is appropriate here
+        #if it would stay here, activating a new chain link could remove the LRA at the base of the chain
 
         card = self.cardsById[cardId]
         action = card.actiondict[action_name]
@@ -225,9 +239,17 @@ class GameState:
             
             if (answer == "No"):
                 self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
+                
+                if_trigger_cat_to_clear = 'OTP' if responding_player == self.turnplayer else 'OOP'
+
+                engine.HaltableStep.clear_chainable_if_triggers(self, if_trigger_cat_to_clear)
+                engine.HaltableStep.clear_chainable_when_triggers(self)
+
                 self.keep_running_steps = True
                 self.run_steps()
+
             elif (answer == "Yes"):
+                self.waiting_for_one_action_choice = True
                 self.player_to_stop_waiting_when_run_action = waiting_player
 
             
@@ -332,12 +354,14 @@ def get_default_gamestate(sio, duel_id):
     dmdesc = "The ultimate wizard in terms of attack and defense."
     ssdesc = "Level 6 example monster"
 
-    mysticalelf0 = engine.Cards.NormalMonsterCard("Mystical Elf", "Light", "Spellcaster", 4, 800, 2000, medesc0)
-    alexdragon0 = engine.Cards.NormalMonsterCard("Alexandrite Dragon", "Light", "Dragon", 4, 2000, 100, addesc0)
-    summonedskull0 = engine.Cards.NormalMonsterCard("Summoned Skull", "Dark", "Fiend", 6, 2500, 1200, ssdesc) 
-    darkmagician0 = engine.Cards.NormalMonsterCard("Dark Magician", "Dark", "Spellcaster", 7, 2500, 2000, dmdesc)
+    mysticalelf0 = engine.Cards.NormalMonsterCard("Mystical Elf", "Light", "Spellcaster", 4, 800, 2000, medesc0, 'kero_chill.png')
+    alexdragon0 = engine.Cards.NormalMonsterCard("Alexandrite Dragon", "Light", "Dragon", 4, 2000, 100, addesc0, 'alexandrite_dragon.jpg')
+    summonedskull0 = engine.Cards.NormalMonsterCard("Summoned Skull", "Dark", "Fiend", 6, 2500, 1200, ssdesc, 'barrel_dragon.png') 
+    darkmagician0 = engine.Cards.NormalMonsterCard("Dark Magician", "Dark", "Spellcaster", 7, 2500, 2000, dmdesc, 'barrel_dragon.png')
     
-    yugi.give_deck([darkmagician0, mysticalelf0])
+    traphole0 = engine.Cards.TrapCard("Trap Hole", "Dump a monster with 1000 or more ATK", engine.Effect.TrapHoleEffect(), 'trap_hole.jpg')
+
+    yugi.give_deck([darkmagician0, traphole0])
     kaiba.give_deck([summonedskull0, alexdragon0])
 
     return GameState(yugi, kaiba, sio, duel_id)

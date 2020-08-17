@@ -9,7 +9,7 @@ FACEUPTOEVERYONE = 2
 FACEUPTOOPPONENT = 3
 
 class Card:
-    def __init__(self, name, text, cardclass): 
+    def __init__(self, name, text, cardclass, imgpath): 
         global cardcounter
         self.ID = cardcounter
         cardcounter += 1
@@ -17,6 +17,8 @@ class Card:
         self.face_up = FACEDOWN
         self.text = text
         self.cardclass = cardclass
+        self.imgpath = imgpath
+
         self.owner = None
         self.location = ""
         self.zone = None
@@ -36,8 +38,8 @@ class Card:
 
 
 class MonsterCard(Card):
-    def __init__(self, name, attr, type, level, attack, defense, text, monsterclass, effect):
-        super(MonsterCard, self).__init__(name, text, 'Monster')
+    def __init__(self, name, attr, type, level, attack, defense, text, monsterclass, effect, imgpath):
+        super(MonsterCard, self).__init__(name, text, 'Monster', imgpath)
         self.attribute = attr
         self.type = type
         self.level = level
@@ -70,8 +72,8 @@ class MonsterCard(Card):
 
 
 class NormalMonsterCard(MonsterCard):
-    def __init__(self, name, attr, type, level, attack, defense, text):
-        super(NormalMonsterCard, self).__init__(name, attr, type, level, attack, defense, text, "Normal", None)
+    def __init__(self, name, attr, type, level, attack, defense, text, imgpath):
+        super(NormalMonsterCard, self).__init__(name, attr, type, level, attack, defense, text, "Normal", None, imgpath)
         if(self.level > 4 and self.level <= 6):
             self.numtributesrequired = 1
         elif(self.level > 6):
@@ -79,8 +81,8 @@ class NormalMonsterCard(MonsterCard):
 
 
 class SpellTrapCard(Card):
-    def __init__(self, name, subclass, text, effect):
-        super(SpellTrapCard, self).__init__(name, text, "Spell/Trap")
+    def __init__(self, name, subclass, text, effect, imgpath):
+        super(SpellTrapCard, self).__init__(name, text, "Spell/Trap", imgpath)
         self.wassetthisturn = False
         self.spelltrapsubclass = subclass
         self.effect = effect
@@ -93,19 +95,19 @@ class SpellTrapCard(Card):
         self.effect.init(gamestate, self)
 
 class TrapCard(SpellTrapCard):
-    def __init__(self, name, text, effect):
-        super(TrapCard, self).__init__(name, "Normal Trap", text, effect)
+    def __init__(self, name, text, effect, imgpath):
+        super(TrapCard, self).__init__(name, "Normal Trap", text, effect, imgpath)
         self.actiondict["Activate"] = Action.ActivateNormalTrap()
 
 
     def init_actions_and_effects(self, gamestate):
         super(TrapCard, self).init_actions_and_effects(gamestate)
-        self.actiondict["Activate"].init(gamestate, self, self.effect)
+        self.actiondict["Activate"].init(self, self.effect)
 
 
 class ContinuousSpellCard(SpellTrapCard):
-    def __init__(self, name, text, effect):
-        super(ContinuousSpellCard, self).__init__(name, "Continuous Spell", text, effect)
+    def __init__(self, name, text, effect, imgpath):
+        super(ContinuousSpellCard, self).__init__(name, "Continuous Spell", text, effect, imgpath)
         if effect.type == "Passive":
             self.actiondict["Activate"] = Action.ActivateContinuousPassiveSpell()
 

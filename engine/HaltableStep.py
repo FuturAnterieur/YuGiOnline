@@ -42,6 +42,12 @@ class DisableLRARecording(HaltableStep):
     def run(self, gamestate):
         gamestate.record_LRA = False
 
+def TranslateTriggerCategory(trigger, gamestate):
+    player_str = "TP" if trigger.card.owner == gamestate.turnplayer else "OP"
+
+    return trigger.category + player_str
+
+
 class ProcessIfTriggers(HaltableStep): #this step should be run at the end of each action
     
     def run(self, gamestate):
@@ -49,17 +55,19 @@ class ProcessIfTriggers(HaltableStep): #this step should be run at the end of ea
         triggers_to_run_queue = {'MTP' : [], 'MOP' : []}
 
         for trigger in gamestate.if_triggers:
-            if trigger.matches(self.parentAction):
-                if trigger.can_be_chained_now(gamestate): #checks if we are in a chain and the trigger's spell speed is >= to the current spell speed 
-                    if trigger.category == 'MTP' or trigger.category == 'MOP':
-                        triggers_to_run_queue[trigger.category].append(trigger)
+            if trigger.matches(self.parentAction, gamestate):
+                full_category = TranslateTriggerCategory(trigger, gamestate)
+                if trigger.can_be_chained_now(gamestate): #checks if we are building a chain and if the trigger's spell speed is >= to the current spell speed 
+                    
+                    if full_category == 'MTP' or full_category == 'MOP':
+                        triggers_to_run_queue[full_category].append(trigger)
                     else:
-                        gamestate.chainable_optional_if_triggers[trigger.category].append(trigger)
+                        gamestate.chainable_optional_if_triggers[full_category].append(trigger)
                         #this container is cleared after each chain response window function
                         #If-effects can only be activated at the first possible opportunity
 
                 else:
-                    gamestate.saved_if_triggers[trigger.category].append(trigger) #where they are saved for the next SEGOC chain
+                    gamestate.saved_if_triggers[full_category].append(trigger) #where they are saved for the next SEGOC chain
 
         #TODO : player choice of trigger order if there are many triggers in the same category
         for trigger in triggers_to_run_queue['MTP']:
@@ -168,12 +176,14 @@ BUT ALSO
 
 def refresh_chainable_when_triggers(gamestate): #This will be run at each chain response window as well as at the start of the SEGOC chain building process
     for trigger in gamestate.when_triggers:
+        full_category = TranslateTriggerCategory(trigger, gamestate)
         for action in gamestate.lastresolvedactions:
-            if trigger.matches[action]:
-                gamestate.chainable_optional_when_triggers[trigger.category].append(trigger)
+            if trigger.matches(action, gamestate):
+                gamestate.chainable_optional_when_triggers[full_category].append(trigger)
 
-        if trigger.matches(gamestate.chainlinks[-1]):
-            gamestate.chainable_optional_when_triggers[trigger.category].append(trigger)
+        if len(gamestate.chainlinks) > 0:
+            if trigger.matches(gamestate.chainlinks[-1], gamestate):
+                gamestate.chainable_optional_when_triggers[full_category].append(trigger)
         
         #the categories for when triggers : VTP (visible turn player), ITP (invisible turn player), VOP and IOP (for other player)
         #the container will be emptied after these processes
@@ -198,7 +208,7 @@ class RefreshChainableWhenTriggers(HaltableStep):
 
 class ClearChainableWhenTriggers(HaltableStep):
     def run(self, gamestate):
-        clear_chainale_when_triggers(gamestate)
+        clear_chainable_when_triggers(gamestate)
 
 class ClearChainableIfTriggers(HaltableStep):
     def run(self, gamestate):
@@ -217,7 +227,7 @@ class RunImmediateTriggers(HaltableStep):
 
     def run(self, gamestate):
         for trigger in gamestate.immediate_triggers:
-            if trigger.matches(self.parentAction):
+            if trigger.matches(self.parentAction, gamestate):
                 trigger.execute(gamestate)
 
 class LaunchTTR(HaltableStep):
@@ -316,10 +326,74 @@ class NSMCServer(HaltableStep): #NormalSummonMonsterCoreServer
 
     def run(self, gamestate):
         summonedmonster = self.args[self.sman]
-        gamestate.normalsummonscounter += 1
+        
         player = summonedmonster.owner
         player.hand.remove_card(summonedmonster)
         player.monsterzones.add_card(summonedmonster, self.args[self.zan].zonenum)
+
+
+class SetSpellTrapServer(HaltableStep):
+    def __init__(self, pA, card_arg_name):
+        super(SetSpellTrapServer, self).__init__(pA)
+        self.can = card_arg_name
+
+    def run(self, gamestate):
+        card = self.args[self.can]
+        player = card.owner
+        player.hand.remove_card(card)
+        
+        card.face_up = FACEDOWN
+
+        chosenzonenum = 3
+        player.spelltrapzones.add_card(card, chosenzonenum)
+        card.wassetthisturn = True
+
+class ActivateNormalTrapBeforeActivate(HaltableStep):
+    def __init__(self, pA, card_arg_name, effect_arg_name):
+        super(ActivateNormalTrapBeforeActivate, self).__init__(pA)
+        self.can = card_arg_name
+        self.ean = effect_arg_name
+
+    def run(self, gamestate):
+        card = self.args[self.can]
+        effect = self.args[self.ean]
+
+        gamestate.curspellspeed = effect.spellspeed
+
+        card.face_up = FACEUPTOEVERYONE
+
+class CallEffectActivate(HaltableStep):
+    def __init__(self, pA, effect_arg_name):
+        super(CallEffectActivate, self).__init__(pA)
+        self.ean = effect_arg_name
+
+    def run(self, gamestate):
+        self.args[self.ean].Activate(gamestate)
+
+class CallEffectResolve(HaltableStep):
+    def __init__(self, pA, effect_arg_name):
+        super(CallEffectResolve, self).__init__(pA)
+        self.ean = effect_arg_name
+
+    def run(self, gamestate):
+        self.args[self.ean].Resolve(gamestate)
+
+class AppendToChainLinks(HaltableStep):
+    def run(self, gamestate):
+        gamestate.chainlinks.append(self.parentAction)
+
+class PopChainLinks(HaltableStep):
+    def run(self, gamestate):
+        gamestate.chainlinks.pop()
+
+class SetBuildingChain(HaltableStep):
+    def run(self, gamestate):
+        gamestate.is_building_a_chain = True
+
+class UnsetBuildingChain(HaltableStep):
+    def run(self, gamestate):
+        gamestate.is_building_a_chain = False
+
 
 class LowerOuterActionStackLevel(HaltableStep):
     def run(self, gamestate):
@@ -350,17 +424,27 @@ class CreateCard(HaltableStep):
         self.fromzone = self.args[self.zan]
         self.player = self.args['player']
 
-        gamestate.sio.emit('create_card', {'cardid' : str(self.card.ID), 'zone':self.fromzone.name, 'player' : str(self.player.player_id)}, 
+        gamestate.sio.emit('create_card', {'cardid' : str(self.card.ID), 'zone':self.fromzone.name, 
+                                            'player' : str(self.player.player_id), 'imgpath' : self.card.imgpath}, 
                                             room="duel" + str(gamestate.duel_id) + "_public_info")
 
 class EraseCard(HaltableStep):
     def __init__(self, pA, card_arg_name):
-        super(CreateCard, self).__init__(pA)
+        super(EraseCard, self).__init__(pA)
         self.can = card_arg_name
     
     def run(self, gamestate):
         self.card = self.args[self.can]
         gamestate.sio.emit('erase_card', {'cardid' : str(self.card.ID)}, room="duel" + str(gamestate.duel_id) + "_public_info")
+
+class AddCardToChainSendsToGraveyard(HaltableStep):
+    def __init__(self, pA, card_arg_name):
+        super(AddCardToChainSendsToGraveyard, self).__init__(pA)
+        self.can = card_arg_name
+
+    def run(self, gamestate):
+        card = self.args[self.can]
+        gamestate.cards_chain_sends_to_graveyard.append(card)
 
 class ChangeCardVisibility(HaltableStep):
     def __init__(self, pA, list_of_player_arg_names, card_arg_name, visibility):
@@ -470,14 +554,10 @@ class OpenWindowForResponse(HaltableStep):
 
         possible_cards, choices_per_card = gamestate.get_available_choices(responding_player)
         
-        if_trigger_cat_to_clear = 'OTP' if responding_player == gamestate.turnplayer else 'OOP'
-
-        clear_chainable_if_triggers(gamestate, if_trigger_cat_to_clear)
-        clear_chainable_when_triggers(gamestate)
-
         answer_choices = 'Yes_No' if len(possible_cards) > 0 else 'No'
         
-        gamestate.sio.emit('start_waiting', {'reason' : self.response_type}, room =  "duel" + str(gamestate.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
+        gamestate.sio.emit('start_waiting', {'reason' : self.response_type},
+                                room =  "duel" + str(gamestate.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
         gamestate.sio.emit('ask_question', {'question' : self.response_type, 'choices' : answer_choices}, 
                                 room =  "duel" + str(gamestate.duel_id) + "_player" + str(responding_player.player_id) + "_info")
         #the client will send back the question so that the server knows what to do according to the answer.
@@ -491,6 +571,35 @@ class OpenWindowForResponse(HaltableStep):
         gamestate.answer_arg_name = self.aan
         gamestate.keep_running_steps = False
         
+class SetMultipleActionWindow(HaltableStep):
+    def __init__(self, controlling_player, current_phase_or_step):
+        super(SetMultipleActionWindow, self).__init__(None)
+        self.controlling_player = controlling_player
+        self.current_phase_or_step = current_phase_or_step
+    
+    def run(self, gamestate):
+        gamestate.player_in_multiple_action_window = self.controlling_player
+
+        waiting_player = self.controlling_player.other
+
+        gamestate.sio.emit('start_waiting', {'reason' : self.current_phase_or_step},
+                                room =  "duel" + str(gamestate.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
+        gamestate.sio.emit('multiple_action_window', {'current_phase_or_step' : self.current_phase_or_step}, 
+                                room =  "duel" + str(gamestate.duel_id) + "_player" + str(self.controlling_player.player_id) + "_info")
+
+        gamestate.keep_running_steps = False
+        gamestate.player_to_stop_waiting_when_run_action = waiting_player
+
+class LetTurnPlayerChooseNextPhase(HaltableStep):
+    def __init__(self):
+        super(LetTurnPlayerChooseNextPhase, self).__init__(None)
+
+    def run(self, gamestate):
+        gamestate.sio.emit('choose_next_phase', {}, room =  "duel" + str(gamestate.duel_id) + "_player" + str(gamestate.turnplayer.player_id) + "_info")
+        gamestate.sio.emit('start_waiting', {'reason' : 'phase_changing'}, 
+                    room =  "duel" + str(gamestate.duel_id) + "_player" + str(gamestate.otherplayer.player_id) + "_info")
+
+        gamestate.keep_running_steps = False
 
 class RunDrawPhase(HaltableStep):
     def __init__(self):

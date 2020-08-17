@@ -208,6 +208,15 @@ def ask_phase_change(sid, message):
         gameStates[duel.id].phase_transition_asked_funcs[message['phase']]()
 
 @sio.event
+def pass_action(sid, message):
+    duel = get_object_or_404(Duel, pk=int(message['duelid']))
+    theplayer = duel.player_set.get(player_number = int(message['pnum']))
+
+    if (theplayer.sid == sid):
+        gameStates[duel.id].keep_running_steps = True
+        gameStates[duel.id].run_steps()
+
+@sio.event
 def create_text_event(sid, message):
     print("Create text event with ", message['data'])
     sio.emit('create_text_response', {'data' : message['data']})

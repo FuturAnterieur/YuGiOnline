@@ -1,7 +1,7 @@
 
 import engine.GameState
 import engine.Action as Action
-
+import engine.HaltableStep
 
 class Effect:
     def __init__(self, name, etype, does_target):
@@ -139,7 +139,50 @@ class TrapHoleEffect(Effect):
         self.spellspeed = 2
         self.SummonedMonster = None
 
+        self.potential_targets = []
+
+        self.effect_trigger = engine.GameState.TriggerEvent("TrapHoleTrigger", self.THcard, self, "when", "I", self.MatchOnTHCompatibleSummon)
+        self.effect_trigger.funclist.append(self.LaunchNormalTrapActivationForTH)
+
+        self.set_trigger = engine.GameState.TriggerEvent("TrapHoleOnSet", self.THcard, self, "immediate", "", self.MatchOnTHSet)
+        self.set_trigger.funclist.append(self.TurnOnTHTrigger)
+
+        self.leaves_field_trigger = engine.GameState.TriggerEvent("TrapHoleOnLeaveField", self.THcard,
+                                                                    self, "immediate", "", self.MatchOnTHLeavesField)
+        self.leaves_field_trigger.funclist.append(self.TurnOffTHTrigger)
+
+        gamestate.immediate_triggers.append(self.set_trigger)
+        gamestate.immediate_triggers.append(self.leaves_field_trigger)
+
+    def MatchOnTHSet(self, action, gamestate):
+        return action.__class__.__name__ == "SetSpellTrap" and action.card == self.THcard
+
+    def TurnOnTHTrigger(self, gamestate):
+        gamestate.when_triggers.append(self.effect_trigger)
+
+    def MatchOnTHLeavesField(self, action, gamestate):
+        return action.__class__.__name__ == "CardLeavesField" and action.card == self.THcard
+
+    def TurnOffTHTrigger(self, gamestate):
+        gamestate.when_triggers.remove(self.effect_trigger)
+
+
+    def MatchOnTHCompatibleSummon(self, action, gamestate):
+        if action.name == "Normal Summon Monster" and action.card.face_up == True and action.card.attack >= 1000:
+            self.potential_targets.append(action.card)
+            return True
+        else:
+            return False
+
+    def LaunchNormalTrapActivationForTH(self, gamestate):
+        self.THcard.actiondict["Activate"].run(gamestate)
+
     def reqs(self, gamestate):
+        #I'll still have to implement trap card immunity somewhere
+        full_category = engine.HaltableStep.TranslateTriggerCategory(self.effect_trigger, gamestate)
+        return self.effect_trigger in gamestate.chainable_optional_when_triggers[full_category]
+
+        """
         lastactionscontainmatch = False
         for action in gamestate.lastresolvedactions:
             if action.name == "Normal Summon Monster" and action.card.face_up == True and action.card.attack >= 1000:
@@ -156,20 +199,18 @@ class TrapHoleEffect(Effect):
                     self.SummonedMonster = action.card
                     break
         """
-        summonresponsewindowmatches = False
-        if gamestate.insummonresponsewindow is not None:
-            action = gamestate.insummonresponsewindow
-            if action.card.face_up == True and action.card.attack >= 1000:
-                summonresponsewindowmatches = True
-                self.SummonedMonster = action.card
-        """
         #Trap Hole actually works through the summon response window (but not the summon negation window) 
         #AND the summon response window will work through lastresolvedactions 
         
         return lastactionscontainmatch # or summonresponsewindowmatches 
 
     def Activate(self, gamestate):
-        pass
+        #choose the target if many choices are possible (which would only happen if 
+        #many monsters are summoned at once, which I am not even sure is possible)
+        
+        self.TargetedMonster = self.potential_targets[0]
+
+        
 
     """
     @BlockIfImmune_SingleTarget(self.SummonedMonster, self)
@@ -180,14 +221,15 @@ class TrapHoleEffect(Effect):
 
     """
     def Resolve(self, gamestate):
-        blocked = False
-        if self.SummonedMonster.effect.etype == "Immune":
-            if self.SummonedMonster.effect.blockeffect(self):
-                blocked = True
-        if blocked == False:
-            DestroyAction = Action.DestroyCard()
-            DestroyAction.init(self.SummonedMonster)
-            DestroyAction.run(gamestate)
+        #blocked = False
+        #if self.SummonedMonster.effect.etype == "Immune":
+        #    if self.SummonedMonster.effect.blockeffect(self):
+        #        blocked = True
+        #if blocked == False:
+        
+        DestroyAction = Action.DestroyCard()
+        DestroyAction.init(self.TargetedMonster, False)
+        DestroyAction.run(gamestate)
     
 #je pourrais essayer d'implementer ceci avec des decorateurs,
 #exemple : un decorateur qui prendrait en argument le self.SummonedMonster et le self -- voir plus haut.
