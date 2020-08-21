@@ -62,14 +62,14 @@ class GameState:
 
 
         self.curphase = "None"
+
         self.battlephasebegan = False
         self.battlephaseended = False
         self.inbattlephase = False
         self.indamagestep = False
+        self.current_battle_phase_step = "None"
+        self.current_damage_step_timing = "None"
         
-        self.insummonnegationwindow = None
-        
-        self.inresponsewindow = None #response window for optional when-triggers
         
         self.ownerofcurrenteffect = None
         self.curspellspeed = 0
@@ -93,6 +93,7 @@ class GameState:
 
         self.bannedactions = set()
         self.monstersthatattackedthisturn = []
+        self.monsters_to_be_destroyed_by_battle = []
 
         self.winner = None
         
@@ -126,6 +127,9 @@ class GameState:
         self.chainable_optional_when_triggers = { 'VTP' : [], 'ITP' : [], 'VOP' : [], 'IOP' : [] }
 
         self.triggerevents = []
+
+        self.AttackReplayTrigger = TriggerEvent("AttackReplayTrigger", None, None, "immediate", None, self.MatchAttackConditionChanges)
+        self.AttackReplayTrigger.funclist.append(self.SetReplayWasTriggered)
 
         firstplayer.init_card_actions_and_effects(self)
         otherplayer.init_card_actions_and_effects(self)
@@ -171,7 +175,22 @@ class GameState:
 
     def standby_phase(self):
         self.phase_transition('standby_phase')
+        #if cards can be activated (like Treeborn Frog), run a SetMultipleActionWindow for the turnplayer
+        possible_cards, choices_per_card = self.get_available_choices(self.turnplayer)
+        list_of_steps = []
+
+
+        if len(possible_cards) > 0:
+            list_of_steps.append(engine.HaltableStep.SetMultipleActionWindow(self.turnplayer, 'standby_phase'))
+
+        for i in range(len(list_of_steps) - 1, -1, -1):
+            self.steps_to_do.appendleft(list_of_steps[i])
         
+        self.keep_running_steps = True
+        self.run_steps()
+
+
+
     def set_main_phase_1(self):
         self.phase_transition('main_phase_1')
 
@@ -179,10 +198,17 @@ class GameState:
         self.phase_transition('battle_phase')
         self.battlephasebegan = True
         self.inbattlephase = True
-        
+        self.current_battle_phase_step = 'start_step'
         self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(self.turnplayer, 'battle_phase_start_step'))
         self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(self.otherplayer, 'battle_phase_start_step'))
         self.steps_to_do.append(engine.HaltableStep.SetBattleStep())
+        self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(self.turnplayer, 'battle_phase_battle_step'))
+        self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(self.otherplayer, 'battle_phase_battle_step'))
+        self.steps_to_do.append(engine.HaltableStep.RunAction(None, engine.Action.BattleStepBranchOut()))
+        #at the end of the damage step action, there will be a SetBattleStep as well as two SetMultipleActionWindow
+
+        self.keep_running_steps = True
+        self.run_steps()
 
     def set_main_phase_2(self):
         self.phase_transition('main_phase_2')
@@ -340,8 +366,14 @@ class GameState:
         if len(self.steps_to_do) == 0:
             print("Finished running scheduled steps")
             
+    def MatchAttackConditionChanges(self, action, gamestate):
+        if action.name == "Card Leaves Field" and action.card.owner == gamestate.otherplayer and action.card.cardclass == 'Monster':
+            return True
+
+        return False
     
-    
+    def SetReplayWasTriggered(self, gamestate):
+        gamestate.replay_was_triggered = True
         
         
 

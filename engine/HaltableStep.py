@@ -1,6 +1,9 @@
 from engine.Cards import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT
 
 import engine.Action
+from engine.GameState import TriggerEvent
+
+import engine.Effect
 
 class HaltableStep:
     def __init__(self, parentAction):
@@ -81,6 +84,23 @@ class ProcessIfTriggers(HaltableStep): #this step should be run at the end of ea
         #here the categories are 'MTP_TTR', 'MOP_TTR', 'OTP_TTR', 'OOP_TTR'
         #as well as 'OWTP_TTR' and 'OWOP_TTR' for when-effects that can miss their timing
         
+
+
+class ProcessFlipTriggers(HaltableStep):
+    def run(self, gamestate):
+        for trigger in gamestate.flip_triggers:
+            if trigger.matches(self.parentAction, gamestate):
+                if gamestate.curphase == "battle_phase" and gamestate.current_battle_phase_step == "damage_step":
+                    trigger.effect.ADC_trigger = TriggerEvent("FlipTriggerADC", trigger.card, trigger.effect, 'if', trigger.category, engine.Effect.MatchOnADC) 
+                    #to see how MatchOnADC works, check out the TestFunctionOutsideOfClass.py file
+                    trigger.effect.ADC_trigger.funclist.extend([trigger.effect.RemoveADCTriggerFromIfTriggers] + trigger.funclist)
+                    gamestate.if_triggers.append(trigger.effect.ADC_trigger)
+
+                else:
+                    full_category = TranslateTriggerCategory(trigger, gamestate)
+                    gamestate.saved_if_triggers[full_category].append(trigger)
+                    
+
 #Outside of a SEGOC situation, or in a chain that was previously built through SEGOC,
 #no responding action is specified at the start, so the response window opens normally and optional if-triggers
 #can be activated during it.
@@ -319,10 +339,11 @@ class DrawCardServer(HaltableStep):
 
 
 class NSMCServer(HaltableStep): #NormalSummonMonsterCoreServer
-    def __init__(self, pA, summonedmonster_arg_name, zone_arg_name):
+    def __init__(self, pA, summonedmonster_arg_name, zone_arg_name, position_arg_name):
         super(NSMCServer, self).__init__(pA)
         self.sman = summonedmonster_arg_name
         self.zan = zone_arg_name
+        self.pan = position_arg_name
 
     def run(self, gamestate):
         summonedmonster = self.args[self.sman]
@@ -330,8 +351,8 @@ class NSMCServer(HaltableStep): #NormalSummonMonsterCoreServer
         player = summonedmonster.owner
         player.hand.remove_card(summonedmonster)
         player.monsterzones.add_card(summonedmonster, self.args[self.zan].zonenum)
-
-
+        summonedmonster.position = self.args[self.pan]
+        
 class SetSpellTrapServer(HaltableStep):
     def __init__(self, pA, card_arg_name):
         super(SetSpellTrapServer, self).__init__(pA)
@@ -377,6 +398,42 @@ class CallEffectResolve(HaltableStep):
 
     def run(self, gamestate):
         self.args[self.ean].Resolve(gamestate)
+
+class PerformDamageCalculation(HaltableStep):
+    def run(self, gamestate):
+        target = self.args['target']
+        attackingplayer = self.args['player']
+        targetplayer = attackingplayer.other
+        attackingmonster = self.args['attacking_monster']
+
+        if (target == 'direct_attack'):
+            targetplayer.add_life_points(gamestate, -1*attackingmonster.attack)
+            
+        else:
+            targetstat = 0
+            
+            if target.position == "DEF":
+                targetstat = target.defense
+                
+            else:
+                targetstat = target.attack
+            
+            difference = attackingmonster.attack - targetstat
+
+            winnermonster = attackingmonster if difference > 0 else target
+            losermonster = attackingmonster if difference < 0 else target
+
+            if difference == 0 and target.positon == "ATK":
+                gamestate.monsters_to_be_destroyed_by_battle.extend([winnermonster, losermonster])
+
+            else:
+                if winnermonster.position == "ATK":
+                    gamestate.monsters_to_be_destroyed_by_battle.append(losermonster)
+
+                if losermonster.position == "ATK":
+                    losermonster.owner.add_life_points(gamestate, -1*math.fabs(difference))
+
+
 
 class AppendToChainLinks(HaltableStep):
     def run(self, gamestate):
@@ -444,7 +501,7 @@ class AddCardToChainSendsToGraveyard(HaltableStep):
 
     def run(self, gamestate):
         card = self.args[self.can]
-        gamestate.cards_chain_sends_to_graveyard.append(card)
+        gamestate.cards_chain_sends_to_graveyard.append({'card' : card, 'was_negated' : self.parentAction.was_negated})
 
 class ChangeCardVisibility(HaltableStep):
     def __init__(self, pA, list_of_player_arg_names, card_arg_name, visibility):
@@ -601,6 +658,12 @@ class LetTurnPlayerChooseNextPhase(HaltableStep):
 
         gamestate.keep_running_steps = False
 
+
+class CancelAttackInGamestate(HaltableStep):
+    def run(self, gamestate):
+        gamestate.attack_declared = False
+        gamestate.attack_declared_action = None
+
 class RunDrawPhase(HaltableStep):
     def __init__(self):
         super(RunDrawPhase, self).__init__(None)
@@ -622,7 +685,15 @@ class SetMainPhase1(HaltableStep):
     def run(self, gamestate):
         gamestate.set_main_phase_1()
 
+class SetBattleStep(HaltableStep):
+    def __init__(self):
+        super(SetBattleStep, self).__init__(None)
 
+    def run(self, gamestate):
+        gamestate.current_battle_phase_step = 'battle_step'
+        gamestate.attack_declared = False
+        gamestate.attack_declared_action = None
+        gamestate.immediate_triggers.append(gamestate.AttackReplayTrigger)
 
 
         

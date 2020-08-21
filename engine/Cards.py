@@ -52,10 +52,12 @@ class MonsterCard(Card):
         
         self.numtributesrequired = 0
         self.position = "None"
-        self.attackedthisturn = False
+        self.attacks_declared_this_turn = 0
+        self.max_attacks_per_turn = 1
         self.summonmethod = "Normal"
 
         self.actiondict["Normal Summon"] = Action.NormalSummonMonster()
+        self.actiondict["Attack"] = Action.DeclareAttack()
         
         if self.effect is not None:
             if self.effect.type == "Ignition":
@@ -64,7 +66,8 @@ class MonsterCard(Card):
     def init_actions_and_effects(self, gamestate): #this function can be used at game initialization and when the card's controller changes.
         
         self.actiondict["Normal Summon"].init(self)
-        
+        self.actiondict["Attack"].init(self)
+
         if self.effect != None:
             self.effect.init(gamestate, self)
             if self.effect.type == "Ignition":

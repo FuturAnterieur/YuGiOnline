@@ -9,6 +9,18 @@ class Effect:
         self.type = etype
         self.does_target = does_target
 
+def MatchOnADC(action, gamestate):
+    return action.__class__.__name__ == "AfterDamageCalculationTriggers"
+
+class FlipEffect(Effect):
+    def __init__(self, name, etype, does_target):
+        super(FlipEffect, self).__init__(name, etype, does_target)
+        self.ADC_trigger = None
+
+    def RemoveADCTriggerFromIfTriggers(self, gamestate):
+        gamestate.if_triggers.remove(self.ADC_trigger)
+
+
 class ImmuneToTrap(Effect):
     def __init__(self):
         super(ImmuneToTrap, self).__init__("ImmuneToTrap", "Immune", False)
@@ -161,7 +173,7 @@ class TrapHoleEffect(Effect):
         gamestate.when_triggers.append(self.effect_trigger)
 
     def MatchOnTHLeavesField(self, action, gamestate):
-        return action.__class__.__name__ == "CardLeavesField" and action.card == self.THcard
+        return action.__class__.__name__ == "CardLeavesFieldTriggers" and action.card == self.THcard
 
     def TurnOffTHTrigger(self, gamestate):
         gamestate.when_triggers.remove(self.effect_trigger)
