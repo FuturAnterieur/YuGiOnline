@@ -1,7 +1,7 @@
 from engine.Cards import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT
 
 import engine.Action
-from engine.GameState import TriggerEvent
+from engine.TriggerEvent import TriggerEvent
 
 import engine.Effect
 

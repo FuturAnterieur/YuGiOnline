@@ -2,7 +2,7 @@ import engine.Action
 import engine.Cards
 import engine.Effect
 import engine.HaltableStep
-
+from engine.TriggerEvent import TriggerEvent
 
 from collections import deque
 
@@ -15,28 +15,6 @@ class Phase:
         for func in self.funclist:
             func()
 
-class TriggerEvent:
-    def __init__(self, name, card, effect, triggertype, category, matches):
-        self.card = card
-        self.type = triggertype
-        self.category = category
-        self.name = name
-        self.matches = matches
-        self.funclist = []
-
-    def execute(self, gamestate):
-        for func in self.funclist:
-            func(gamestate)
-
-    def can_be_chained_now(self, gamestate): 
-        if gamestate.is_building_a_chain == False:
-            return False
-        
-        if gamestate.curspellspeed <= 1:
-            return self.effect.spellspeed > gamestate.curspellspeed 
-
-        elif gamestate.curspellspeed > 1:
-            return self.effect.spellspeed >= gamestate.curspellspeed
 
 class GameState:
     def __init__(self, firstplayer, otherplayer, sio, duel_id):
@@ -214,6 +192,9 @@ class GameState:
         self.phase_transition('main_phase_2')
         self.battlephaseended = True
         self.inbattlephase = False
+        self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(gamestate.turnplayer, 'main_phase_2'))
+        self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(gamestate.otherplayer, 'main_phase_2'))
+        self.steps_to_do.append(engine.HaltableStep.LetTurnPlayerChooseNextPhase())
 
     def set_end_phase(self):
         self.phase_transition('end_phase') #maybe I'll have to create steps for the end phase and turn switch transitions. We'll see.
