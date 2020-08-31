@@ -1,10 +1,31 @@
 
-function Card(zoneId, face_up, src, manager, ownerNo, id, indexInArray)
+function Card(zoneId, face_up, rotation, src, manager, ownerNo, id, indexInArray)
 {
-    console.log('card constructor called.');
     this.zoneId = zoneId;
-    var Coords = GetZoneCoords(zoneId);
-
+    var Coords;
+    if(zoneId == '0_Hand' || zoneId == '1_Hand')
+    {
+	var totalNumCardsInHand;
+	var whichHand;
+	var splitzone = zoneId.split("_");
+	if (splitzone[0] == manager.perspectiveNo)
+	{
+		totalNumCardsInHand = manager.numcards_in_my_hand;
+		whichHand = "my";
+	}
+	else
+	{
+		totalNumCardsInHand = manager.numcards_in_his_hand;
+		whichHand = "his";
+	}
+	curNumCardsInHand = manager.cardsInHands[whichHand].length;
+	Coords = manager.getCardInHandPos(whichHand, totalNumCardsInHand, curNumCardsInHand);
+	manager.cardsInHands[whichHand].push(this);
+    }
+    else
+    {
+         Coords = GetZoneCoords(zoneId);
+    }
     this.x = Coords.x;
     this.y = Coords.y;
     
@@ -25,7 +46,7 @@ function Card(zoneId, face_up, src, manager, ownerNo, id, indexInArray)
     this.width = this.manager.cardWidth;
     this.height = 88;
 
-    this.rotation = "Vertical";
+    this.rotation = rotation; //"Vertical" or "Horizontal"
 
     this.right = this.x + this.width;
     this.bottom = this.y + this.height;

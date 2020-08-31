@@ -5,6 +5,7 @@ var CardManager = {
     {
 	this.turnplayer = '0';
 	this.clientNo = clientnumber;
+	this.perspectiveNo = clientnumber == 'SPECTATOR' ? '0' : clientnumber;
 	this.duelid = duelid;
         this.socket = socket;
         this.card_verso = new Image();
@@ -302,11 +303,11 @@ var CardManager = {
 	}
     },
     
-    createCard : function(zoneId, face_up, imgsrc, ownerNo, id)
+    createCard : function(zoneId, face_up, rotation, imgsrc, ownerNo, id)
     {
-	console.log(zoneId + ' ' + id);
+	console.log('card ' + id + ' created at ' + zoneId);
 	
-	newcard = new Card(zoneId, face_up, imgsrc, CardManager, ownerNo, id, this.cards.length);
+	newcard = new Card(zoneId, face_up, rotation, imgsrc, CardManager, ownerNo, id, this.cards.length);
 	this.cards.push(newcard);
 	this.cardsById[id] = newcard;
 	
@@ -366,10 +367,14 @@ var CardManager = {
     },
     deleteCardButtons : function()
     {
-	for(var i = 0; i < this.cardButtons.length; i++)
+	/*for(var i = 0; i < this.cardButtons.length; i++)
 	{
 	    this.cardButtons[i].undraw();
-	}
+	}*/
+	GameArea.clear();
+	this.drawCards();
+	this.drawPhaseButtons();
+
 	this.cardButtons.splice(0, this.cardButtons.length);
 	this.clickMode = 0;
     },
@@ -395,17 +400,20 @@ var CardManager = {
 		var splitzone = theCard.zoneId.split("_");
 		var otherId;
 
-		if (splitzone[0] == this.clientNo)
+		if (splitzone[0] == this.perspectiveNo)
 		{
 			whichHand = 'my';
+			this.numcards_in_my_hand -= 1;
 		}
 		else
 		{
 			whichHand = 'his';
+			this.numcards_in_his_hand -= 1;
 		}
 		
 		var spliced_position = theCard.indexInHand;	       
 		this.cardsInHands[whichHand].splice(theCard.indexInHand, 1);
+		
 		theCard.indexInHand = undefined;
 		var newNumCardsInHand = this.cardsInHands[whichHand].length;
 
@@ -430,8 +438,6 @@ var CardManager = {
 			       				tl: this.getCardInHandPos(whichHand, newNumCardsInHand, j)});
 
 		}
-
-
  	     }
 
 	     else if (zoneId == "0_Hand" || zoneId == "1_Hand")
@@ -464,13 +470,15 @@ var CardManager = {
     {
 	var splitzone = zoneId.split("_");
 	var whichHand;
-	if (splitzone[0] == this.clientNo)
+	if (splitzone[0] == this.perspectiveNo)
 	{
 		whichHand = 'my';
+		this.numcards_in_my_hand += 1;
 	}
 	else
 	{
 		whichHand = 'his';
+		this.numcards_in_his_hand -= 1;
 	}	
 	
 	this.cardsInHands[whichHand].push(theCard);
@@ -534,7 +542,7 @@ var CardManager = {
 		ydiff = targetLocation.y - theCard.y;
 		absxdiff = Math.abs(xdiff);
 		absydiff = Math.abs(ydiff);
-		if (absxdiff > absxspeed || absydiff > absyspeed)
+		if (absxdiff > Math.max(absxspeed, 5) || absydiff > Math.max(absyspeed, 5))
 		{
 		    GameArea.clear(); //leaves no marks, but forces to redraw the whole scene
 		    //theCard.undraw(); //always ends up leaving marks one way or another

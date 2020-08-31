@@ -22,6 +22,7 @@ thread = None
 gameStates = {}  #TODO : put this into a managing class
 duel_connected_sids = {}
 duel_spectator_counts = {}
+gameStatesBySid = {}
 
 def index(request):
     #global thread
@@ -100,7 +101,7 @@ def startup_GameState(duel_id):
 def join_duel_room(sid, message):
     duel = get_object_or_404(Duel, pk=int(message['duelid']))
     sio.enter_room(sid, "duel" + str(duel.id) + "_public_info")
-    
+    gameStatesBySid[sid] = gameStates[duel.id]
 
     if (message['pnum'] == "0" and duel.player_zero_joined == False):
         playerzero = duel.player_set.get(player_number = 0)
@@ -124,10 +125,19 @@ def join_duel_room(sid, message):
     
     elif (message['pnum'] == "SPECTATOR"):
         print("Spectator joined")
+        spectator_id = gameStates[duel.id].spectator_count
         sio.enter_room(sid, "duel" + str(duel.id) + "_spectator_info")
+        sio.enter_room(sid, "duel" + str(duel.id) + "_spectator" + str(spectator_id) + "_info")
+        gameStates[duel.id].dict_of_sids['spectator' + str(spectator_id)] = sid
         gameStates[duel.id].spectator_count += 1
-        gameStates[duel.id].dict_of_sids['spectator' + str(duel_spectator_counts[duel.id])] = sid
 
+        if len(gameStates[duel.id].waiting_for_players) > 0:
+            gameStates[duel.id].spectators_to_refresh_view.append(spectator_id)
+        else:
+            gameStates[duel.id].refresh_view(spectator_id)
+
+        
+    
     if duel.player_one_joined == True and duel.player_zero_joined == True and gameStates.get(duel.id) is not None:
         if gameStates.get(duel.id).has_started == False:
             print(duel.id, "beginning")
@@ -174,8 +184,8 @@ def move_complete(sid, message):
         pass
 
     if len(gameStates[duel.id].waiting_for_players) == 0:
-        gameStates[duel.id].keep_running_steps = True
-        gameStates[duel.id].run_steps()
+        gameStates[duel.id].stop_waiting_for_players()
+        
 
 @sio.event
 def target_card_chosen(sid, message):
@@ -221,7 +231,7 @@ def create_text_event(sid, message):
     print("Create text event with ", message['data'])
     sio.emit('create_text_response', {'data' : message['data']})
 
-
+"""
 @sio.event
 def my_event(sid, message):
     sio.emit('my_response', {'data': message['data']}, room=sid)
@@ -262,7 +272,7 @@ def my_room_event(sid, message):
 @sio.event
 def disconnect_request(sid):
     sio.disconnect(sid)
-
+"""
 
 @sio.event
 def connect(sid, environ):
@@ -272,6 +282,27 @@ def connect(sid, environ):
 @sio.event
 def disconnect(sid):
     print('Client disconnected')
+    theGameState = gameStatesBySid[sid]
+    was_waiting_for_player = True
+    try:
+        theGameState.waiting_for_players.remove(sid)
+    except KeyError:
+        was_waiting_for_player = False
+
+    list_of_pnums_to_delete = []
+    for pnum in theGameState.dict_of_sids.keys():
+        if theGameState.dict_of_sids[pnum] == sid:
+            list_of_pnums_to_delete.append(pnum)
+
+    for pnum in list_of_pnums_to_delete:
+        del theGameState.dict_of_sids[pnum]
+    
+    #Add an "end the duel if the leaving player was a duelist
+
+    #This is there to catch the case where the last player the gamestate
+    #was waiting for was a spectator and this player leaves the room before the waiting is finished.
+    if was_waiting_for_player and len(theGameState.waiting_for_players) == 0:
+        theGameState.stop_waiting_for_players()
 
 
 

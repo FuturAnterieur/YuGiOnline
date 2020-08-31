@@ -22,6 +22,9 @@ class GameState:
         self.duel_id = duel_id
         firstplayer.other = otherplayer
         otherplayer.other = firstplayer
+        self.firstplayer = firstplayer
+        self.secondplayer = otherplayer
+
         self.turnplayer = firstplayer
         self.otherplayer = firstplayer.other
         firstplayer.gamestate = self
@@ -83,6 +86,8 @@ class GameState:
         self.dict_of_sids = {}
         self.waiting_for_players = set()
         self.spectator_count = 0
+        self.cards_in_play = []
+        self.spectators_to_refresh_view = []
 
         self.curphase = "Before startup"
         self.phase_transition_triggers = {'draw_phase' : [], 'standby_phase' : [], 'main_phase_1' : [],
@@ -356,6 +361,34 @@ class GameState:
     def SetReplayWasTriggered(self, gamestate):
         gamestate.replay_was_triggered = True
         
+    def stop_waiting_for_players(self):
+        self.keep_running_steps = True
+        self.run_steps()
+        for spectator_id in self.spectators_to_refresh_view:
+            self.refresh_view(spectator_id)
+
+        self.spectators_to_refresh_view.clear()
+
+    def refresh_view(self, spectator_id):
+        self.sio.emit('set_numcards_in_hands', {'0_Hand_numcards': len(self.firstplayer.hand.cards), 
+                                            '1_Hand_numcards' : len(self.secondplayer.hand.cards)}, 
+                                room="duel" + str(self.duel_id) + "_spectator" + str(spectator_id) + "_info")
+
+        for card in self.cards_in_play:
+            rotation = "Vertical"
+            if card.__class__.__name__ == "MonsterCard":
+                if card.position == "DEF":
+                    rotation = "Horizontal"
+
+
+            self.sio.emit('create_card', {'cardid' : str(card.ID), 'rotation': rotation, 'zone':card.zone.name, 
+                                            'player' : str(card.owner.player_id), 'imgpath' : card.imgpath}, 
+                                            room="duel" + str(self.duel_id) + "_spectator" + str(spectator_id) + "_info")
+
+            self.sio.emit('change_card_visibility', {'cardid' : str(card.ID), 'visibility' : "1"}, 
+                    room = "duel" + str(self.duel_id) + "_spectator" + str(spectator_id) + "_info")
+
+        
         
 
 def get_default_gamestate(sio, duel_id):
@@ -374,7 +407,7 @@ def get_default_gamestate(sio, duel_id):
     
     traphole0 = engine.Cards.TrapCard("Trap Hole", "Dump a monster with 1000 or more ATK", engine.Effect.TrapHoleEffect(), 'trap_hole.jpg')
 
-    yugi.give_deck([darkmagician0, traphole0])
+    yugi.give_deck([mysticalelf0, darkmagician0, traphole0])
     kaiba.give_deck([summonedskull0, alexdragon0])
 
     return GameState(yugi, kaiba, sio, duel_id)

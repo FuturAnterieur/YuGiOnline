@@ -49,20 +49,15 @@ class RunResponseWindows(Action):
 
         gamestate.run_steps()
 
-
-def run_for_trigger_action(action, gamestate):
-    list_of_steps = [engine.HaltableStep.RunImmediateTriggers(action),
-                    engine.HaltableStep.ProcessIfTriggers(action),
-                    engine.HaltableStep.AppendToLRAIfRecording(action)]
-
-    for i in range(len(list_of_steps) - 1, -1, -1):
-        gamestate.steps_to_do.appendleft(list_of_steps[i])
-        
-    gamestate.run_steps()
-
 def TTRNonEmpty(gamestate, args):
     return len(gamestate.triggers_to_run) > 0
 
+
+"""
+The idea with RunTriggersCondition is that a further sequence of events (maybe including a chain) can always
+be launched from the RunTriggers of the pre-existing one. Every time RunTriggers happens, 
+the outer action stack level is raised by 1.
+"""
 def RunTriggersCondition(gamestate, args):
     return len(gamestate.action_stack) == gamestate.outer_action_stack_level + 1
 
@@ -71,6 +66,10 @@ def EndOfChainCondition(gamestate, args):
 
 def RunMAWForOtherPlayerCondition(gamestate, args):
     return gamestate.player_in_multiple_action_window == gamestate.otherplayer
+
+def RunIfSaysYes(gamestate, args, answer_arg_name):
+    answer = args[answer_arg_name]
+    return answer == "Yes"
 
 class ChainSendsToGraveyard(Action):
     def run(self, gamestate):
@@ -162,21 +161,21 @@ class RunTriggers(Action): #this function will always be ran at the end of a cha
             list_of_steps.extend(self.ask_trigger_steps_util(trigger, 'otherplayer'))
 
 
-
-        #what happens when an optional effect is triggered through a SEGOC chain?
+        
+        #what happens when an optional effect is triggered and scheduled for a SEGOC chain?
         #the choice is given to the player to activate the effect or not,
         #and then, if there is more than one trigger in the category,
         #the player who owns them decides in which order they get stacked on the chain
         #(same principle as for mandatory effects).
 
-        #in a SEGOC chain, OWTP and OTP are treated as being in the same category
+        #in a SEGOC chain, VTP (visible when-triggers) and OTP (optional if-triggers) are treated as being in the same category
 
         
         #then run the chain
 
         list_of_steps.extend([engine.HaltableStep.ClearChainableWhenTriggers(self), #they'll be refreshed by the response windows that need them
-                                engine.HaltableStep.ClearChainableIfTriggers(self), 
-                                engine.HaltableStep.ClearSavedIfTriggers(self), 
+                                engine.HaltableStep.ClearChainableIfTriggers(self), #we don't need those anymore 
+                                engine.HaltableStep.ClearSavedIfTriggers(self),  #and not those too
                                 engine.HaltableStep.RunStepIfElseCondition(self, 
                                             engine.HaltableStep.LaunchTTR(self), 
                                             engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'turnplayer', 'for_what_event'), 
@@ -250,6 +249,15 @@ class DrawCard(Action):
     run_func = default_run
 
 #reqs-less actions are there mostly just for triggers
+def run_for_trigger_action(action, gamestate):
+    list_of_steps = [engine.HaltableStep.RunImmediateTriggers(action),
+                    engine.HaltableStep.ProcessIfTriggers(action),
+                    engine.HaltableStep.AppendToLRAIfRecording(action)]
+
+    for i in range(len(list_of_steps) - 1, -1, -1):
+        gamestate.steps_to_do.appendleft(list_of_steps[i])
+        
+    gamestate.run_steps()
 
 class CardLeavesFieldTriggers(Action):
     def init(self, card):
@@ -334,7 +342,7 @@ class FlipMonsterFaceUp(Action):
         #in a battle situation,
         #the RunImmediateTriggers will add an if-trigger that triggers at AfterDamageCalculation
 
-        #so a flip trigger's category is 'if', but it goes in the gamestate.flip_triggers container.
+        #so a flip trigger's category is 'if' (either mandatory or optional), but it goes in the gamestate.flip_triggers container.
         
         for i in range(len(list_of_steps) - 1, -1, -1):
             gamestate.steps_to_do.appendleft(list_of_steps[i])
@@ -362,37 +370,35 @@ class TributeMonsters(Action):
             return False
 
         if(len(self.player.monsterzones.occupiedzonenums) < self.numtributesrequired):
-                #print("Not enough monsters can be tributed.")
             return False
         else:
             return True
     
     def default_run(self, gamestate):
                  
+        list_of_steps = [engine.HaltableStep.AppendToActionStack(self), engine.HaltableStep.ClearLRAIfRecording(self)]
+        
+        #'Monster' is not an arg from the args dict but a parameter indicating to choose among monster zones
+        list_of_steps_for_one_tribute = [engine.HaltableStep.ChooseOccupiedZone(self, 'Monster', 'deciding_player', 'target_player', 'chosen_monster'),
+                                         engine.HaltableStep.InitAndRunAction(self, DestroyCard, 'chosenmonster', 'destroy_is_contained')]
+
+        for i in range(self.numtributesrequired):
+            list_of_steps.extend(list_of_steps_for_one_tribute)
+
         ending_steps = [engine.HaltableStep.ProcessIfTriggers(self), engine.HaltableStep.AppendToLRAIfRecording(self), 
                         engine.HaltableStep.RunImmediateTriggers(self), 
                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunTriggers('Monsters tributed')), RunTriggersCondition),
                         engine.HaltableStep.PopActionStack(self),
                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunMAWsAtEnd()), ActionStackEmpty)]
-
-        #'Monster' is not an arg from the args dict but a parameter indicating to choose among monster zones
-        list_of_steps_for_one_tribute = [engine.HaltableStep.ChooseOccupiedZone(self, 'Monster', 'deciding_player', 'target_player', 'chosen_monster'),
-                                         engine.HaltableStep.InitAndRunAction(self, DestroyCard, 'chosenmonster', 'destroy_is_contained')]
-                
-        for i in range(len(ending_steps) - 1, -1, -1):
-            gamestate.steps_to_do.appendleft(ending_steps[i])
         
-
-        for i in range(self.numtributesrequired):
-            for i in range(len(list_of_steps_for_one_tribute) - 1, -1, -1):
-                gamestate.steps_to_do.appendleft(list_of_steps_for_one_tribute[i])
-
-        gamestate.steps_do_do.appendleft(engine.HaltableStep.ClearLRAIfRecording(self))
-        gamestate.steps_to_do.appendleft(engine.HaltableStep.AppendToActionStack(self))
+        list_of_steps.extend(ending_steps)
         
-
+        for i in range(len(list_of_steps) - 1, -1, -1):
+            gamestate.steps_to_do.appendleft(list_of_steps[i])
+        
         gamestate.run_steps()
         
+
     run_func = default_run
 
 
@@ -451,7 +457,7 @@ class NormalSummonMonster(SummonMonster):
 
         gamestate.normalsummonscounter += 1 #optional : put that in a dedicated step (that must go before the summon negation window)
 
-        #TODO : les steps pour le choix de zone libre
+        #TODO : steps (and javascript) for the selection of a free zone
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                         engine.HaltableStep.ClearLRAIfRecording(self),
                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, self.TributeAction), 
@@ -727,7 +733,6 @@ class ResolveNormalTrapCore(Action):
         gamestate.run_steps()
 
 class DeclareAttack(Action):
-    #(SelectTarget)Replay will be its own action
 
     def init(self, card):
         super(DeclareAttack, self).init("Declare Attack", card)
@@ -815,14 +820,7 @@ class AttackDeclarationTriggers(Action):
         self.args = self.pdaa.args
 
     def run(self, gamestate):
-        list_of_steps = [engine.HaltableStep.RunImmediateTriggers(self),
-                        engine.HaltableStep.ProcessIfTriggers(self),
-                        engine.HaltableStep.AppendToLRAIfRecording(self)]
-
-        for i in range(len(list_of_steps) - 1, -1, -1):
-                gamestate.steps_to_do.appendleft(list_of_steps[i])
-        
-        gamestate.run_steps()
+        run_for_trigger_action(self, gamestate)
 
 
 class AttackTargetingTriggers(Action):
@@ -832,15 +830,7 @@ class AttackTargetingTriggers(Action):
         self.args = self.pdaa.args
 
     def run(self, gamestate):
-        list_of_steps = [engine.HaltableStep.RunImmediateTriggers(self),
-                        engine.HaltableStep.ProcessIfTriggers(self),
-                        engine.HaltableStep.AppendToLRAIfRecording(self)]
-
-        for i in range(len(list_of_steps) - 1, -1, -1):
-                gamestate.steps_to_do.appendleft(list_of_steps[i])
-        
-        gamestate.run_steps()
-
+        run_for_trigger_action(self, gamestate)
 
 def AttackTargetingReplayCondition(gamestate, args):
     return gamestate.replay_was_triggered
@@ -886,6 +876,8 @@ class ReselectTargetCore(Action):
         self.pra = parent_replay_action
 
     def run(self, gamestate):
+        #a replay triggers for 'A monster is targeted by an attack' but not for 'a monster declares an attack'
+
         gamestate.attack_declared_action = self.pra
         list_of_steps = [engine.HaltableStep.InitAndRunAction(self, SelectAttackTarget, 'attacking_monster', 'this_action', 'target_arg_name'),
                         engine.HaltableStep.InitAndRunAction(self, AttackTargetingTriggers, 'this_action'),
@@ -898,6 +890,28 @@ class ReselectTargetCore(Action):
         
         gamestate.run_steps()
     
+"""
+the battle step ends with BattleStepBranchOut
+a replay also ends with this action
+
+In it, we evaluate if a replay is needed through AttackTargetingReplayCondition 
+(which just asks for the state of the gamestate.replay_was_triggered variable)
+
+Setting this replay_was_triggered flag belongs to the gamestate.
+
+For now, there is only a trigger checking if an opponent's monster has left the field, 
+but we would also need to check for :
+
+- Any situation where The number of monsters on the turn player's opponent's side of the field changes, no matter how briefly
+    (so that also means to check if monsters are added to the opponent's side of the field, and to check if there are ownership switches)
+This first condition can be dealt with with immediate triggers. But two other conditions can cause a replay :
+
+- A monster is no longer able to attack.
+- A monster that is attacking another monster gains the ability to attack directly due to a card effect.
+
+These two conditions need the change to be permanent to actually cause the replay to happen, and cannot be dealt with with immediate triggers.
+
+"""
 class BattleStepBranchOut(Action):
     def run(self, gamestate):
         self.args = {}
@@ -1016,6 +1030,7 @@ class StartOfDamageStepTriggers(DamageStepTriggerAction):
         super(StartOfDamageStepTriggers, self).init(ds_action)
 
     def run(self, gamestate):
+        gamestate.current_damage_step_timing = "start"
         super(StartOfDamageStepTriggers,self).run(gamestate)
 
 class BeforeDamageCalculationTriggers(DamageStepTriggerAction):
@@ -1023,6 +1038,7 @@ class BeforeDamageCalculationTriggers(DamageStepTriggerAction):
         super(BeforeDamageCalculationTriggers, self).init(ds_action)
 
     def run(self, gamestate):
+        gamestate.current_damage_step_timing = "before_damage_calculation"
         super(BeforeDamageCalculationTriggers,self).run(gamestate)
 
 class DuringDamageCalculation(Action):
@@ -1081,6 +1097,7 @@ class AfterDamageCalculationTriggers(DamageStepTriggerAction):
         super(AfterDamageCalculationTriggers, self).init(ds_action)
 
     def run(self, gamestate):
+        gamestate.current_damage_step_timing = "after_damage_calculation"
         super(AfterDamageCalculationTriggers,self).run(gamestate)
 
 class EndOfDamageStepTriggers(DamageStepTriggerAction):
@@ -1088,6 +1105,7 @@ class EndOfDamageStepTriggers(DamageStepTriggerAction):
         super(EndOfDamageStepTriggers, self).init(ds_action)
 
     def run(self, gamestate):
+        gamestate.current_damage_step_timing = "end"
         super(EndOfDamageStepTriggers,self).run(gamestate)
 
 
@@ -1154,69 +1172,3 @@ class LaunchEndStep(Action):
         
         gamestate.run_steps()
 
-
-
-class ActivateContinuousPassiveSpell(Action):
-
-    def init(self, gamestate, card, effect):
-        super(ActivateContinuousPassiveSpell, self).init("Activate Continuous Passive Spell", card)
-        self.effect = effect
-
-    def reqs(self, gamestate):
-        if self.checkbans(gamestate) == False:
-            return False
-        
-        if gamestate.curspellspeed >= 1:
-            return False
-
-        if self.player != gamestate.turnplayer or gamestate.inbattlephase:
-            return False
-
-        if self.card.location != "Field" and len(self.player.spelltrapzones.occupiedzonenums) == 5:
-            return False
-
-        if self.card.location == "Field" and self.card.face_up == True:
-            return False
-
-        if self.effect.reqs(gamestate) == False:
-            return False
-
-        return True
-
-    def default_run(self, gamestate):
-        #gamestate.clear_lra_if_at_no_triggers()
-        player = self.player
-
-        if self.card.location == "Hand":
-            player.hand.remove_card(self.card)
-            self.card.face_up = FACEUPTOEVERYONE
-
-            chosenzonenum = player.spelltrapzones.choose_free_zone()
-            player.spelltrapzones.add_card(self.card, chosenzonenum)
-            self.card.wassetthisturn = True
-
-        elif self.card.location == "Field":
-            self.card.face_up = FACEUPTOEVERYONE
-        
-        cachespellspeed = gamestate.curspellspeed
-        gamestate.curspellspeed = self.effect.spellspeed
-
-        self.effect.Activate(gamestate)
-    
-        gamestate.chained_effects_stack.append(self.effect)
-        open_window_for_response(gamestate, self.player.other)
-        gamestate.chained_effects_stack.pop()
-        
-        if self.effect.was_negated == False:
-            gamestate.lastresolvedactions.clear()
-            self.effect.Resolve(gamestate) #this is where the passive effect will be turned on
-            #the effect will call a sequence of actions, each calling the appropriate run_if_triggers
-            #and placing the correct series of latest actions in gamestate.lastresolvedactions
-
-            self.run_if_triggers(gamestate) #for "A passive spell card has been activated"
-            gamestate.lastresolvedactions.append(self)
-        
-        
-        gamestate.curspellspeed = cachespellspeed
-
-    run_func = default_run

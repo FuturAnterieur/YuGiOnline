@@ -78,7 +78,7 @@ function GetZoneCoords(zoneId)
 {
 	var targetLocation;
 	var splitzone = zoneId.split("_");
-	if (splitzone[0] == CardManager.clientNo)
+	if (splitzone[0] == CardManager.perspectiveNo)
 	{
 	    targetLocation = ZoneCoords["my"][splitzone[1]];
 	}
@@ -119,7 +119,7 @@ function CardButton(x, y, width, height, text, parentcard)
 	
 	ctx.font = "30px Consolas";
 	ctx.fillStyle = "black";
-	ctx.fillText(this.text, this.x, this.y + 30);
+	ctx.fillText(this.text, this.x, this.y + this.height - 3);
     }
 
     this.undraw = function ()
@@ -146,8 +146,8 @@ function PhaseButton(phase_name, pna, x, y)
     this.x = x;
     this.y = y;
 
-    this.width = 30;
-    this.height = 30;
+    this.width = 50;
+    this.height = 35;
 
     this.bottom = this.y + this.height;
     this.right = this.x + this.width;
@@ -178,7 +178,7 @@ function PhaseButton(phase_name, pna, x, y)
 	
 	ctx.font = "30px Consolas";
 	ctx.fillStyle = "black";
-	ctx.fillText(this.text, this.x, this.y + 30);
+	ctx.fillText(this.text, this.x, this.y + 27);
     }
 
     
@@ -221,9 +221,13 @@ $(document).ready(function(){
 	});
 
 	socket.on('create_card', function(msg) {
-		CardManager.createCard(msg.zone, false, msg.imgpath, msg.player, msg.cardid);
+		CardManager.createCard(msg.zone, false, msg.rotation, msg.imgpath, msg.player, msg.cardid);
 	});
 	
+	socket.on('set_numcards_in_hands', function(msg) { //Used when refreshing the view for a new spectator
+		CardManager.numcards_in_my_hand = msg["0_Hand_numcards"];
+		CardManager.numcards_in_his_hand = msg["1_Hand_numcards"];
+	});
 
 	socket.on('move_card', function(msg) {
 		CardManager.moveCard(msg.cardid, msg.zone);

@@ -60,17 +60,24 @@ class ProcessIfTriggers(HaltableStep): #this step should be run at the end of ea
         for trigger in gamestate.if_triggers:
             if trigger.matches(self.parentAction, gamestate):
                 full_category = TranslateTriggerCategory(trigger, gamestate)
-                if trigger.can_be_chained_now(gamestate): #checks if we are building a chain and if the trigger's spell speed is >= to the current spell speed 
+                if trigger.can_be_chained_now(gamestate): 
+                    #checks if we are building a chain and if the trigger's spell 
+                    #speed is >= to the current spell speed 
                     
                     if full_category == 'MTP' or full_category == 'MOP':
                         triggers_to_run_queue[full_category].append(trigger)
+                        #the triggers in this container will be automatically added to a SEGOC chain
+                        #at the response window following the next resolution of events
                     else:
+                        #if the category is OTP or OOP
                         gamestate.chainable_optional_if_triggers[full_category].append(trigger)
-                        #this container is cleared after each chain response window function
+                        #this container will be checked by the reqs function of if-trigger effects.
+                        #it is also cleared after each chain response window function
                         #If-effects can only be activated at the first possible opportunity
 
                 else:
-                    gamestate.saved_if_triggers[full_category].append(trigger) #where they are saved for the next SEGOC chain
+                    gamestate.saved_if_triggers[full_category].append(trigger) 
+                    #where they are saved for the next SEGOC chain (following the next resolution of events)
 
         #TODO : player choice of trigger order if there are many triggers in the same category
         for trigger in triggers_to_run_queue['MTP']:
@@ -80,16 +87,13 @@ class ProcessIfTriggers(HaltableStep): #this step should be run at the end of ea
             gamestate.triggers_to_run.append(trigger)
 
         
-        #{'MTP_triggers_to_run' : [], 'MOP_triggers_to_run' : [], etc}
-        #here the categories are 'MTP_TTR', 'MOP_TTR', 'OTP_TTR', 'OOP_TTR'
-        #as well as 'OWTP_TTR' and 'OWOP_TTR' for when-effects that can miss their timing
-        
 
 
 class ProcessFlipTriggers(HaltableStep):
     def run(self, gamestate):
         for trigger in gamestate.flip_triggers:
             if trigger.matches(self.parentAction, gamestate):
+                #if we are in the damage step, the flip effect triggers at After Damage Calculation
                 if gamestate.curphase == "battle_phase" and gamestate.current_battle_phase_step == "damage_step":
                     trigger.effect.ADC_trigger = TriggerEvent("FlipTriggerADC", trigger.card, trigger.effect, 'if', trigger.category, engine.Effect.MatchOnADC) 
                     #to see how MatchOnADC works, check out the TestFunctionOutsideOfClass.py file
@@ -97,104 +101,16 @@ class ProcessFlipTriggers(HaltableStep):
                     gamestate.if_triggers.append(trigger.effect.ADC_trigger)
 
                 else:
+                    #else, the flip effect behaves like a 'normal' if-trigger
                     full_category = TranslateTriggerCategory(trigger, gamestate)
                     gamestate.saved_if_triggers[full_category].append(trigger)
                     
 
-#Outside of a SEGOC situation, or in a chain that was previously built through SEGOC,
-#no responding action is specified at the start, so the response window opens normally and optional if-triggers
-#can be activated during it.
-#But activating an optional if-trigger in a response window should remove it from the TTR container.
-#So the response window could check if any optional if and when-triggers have been registered and present them 
-#as choices to the responding player, in addition to the possible choices of Ignition effects (that don't work through triggers).
 
-#Some mandatory effects are Quick, and in the case where they are activated, they automatically go on the current chain.
-#if many mandatory quick effects activate at the same time, they go on the chain in SEGOC order,
-#and some limitations apply to how their effects are resolved (e.g. if they are both negating effects,
-#only the first one may accomplish its original goal; the second one goes on the chain but cannot do anything. See
-#https://www.yomifrog.lima-city.de/xgm/en/Extended_Game_Mechanics_-_Chapter_6.php#p1)
-
-"""
-Quick Effects in SEGOC
-It is also possible that Quick Effects are chained simultaneuosly. This mostly happens when Quick Effects try to negate something and they are mandatory at the same time. An optional Quick Effect can never be activated simultaneuosly. Mandatory effects ALWAYS take precedence over optional effects.
-
-Example:
-
-Player A controls "Horus, the Black Flame Dragon LV8" and "Light and Darkness Dragon". Player B activates a Spell Card.
-
-    "Light and Darkness Dragon" automatically chains as chain link 2.
-    "Horus" cannot be activated in this case because he has an optional Quick Effect.
-
-
-If there are 2 monsters with a negating mandatory Quick Effect, we use SEGOC. The outcome is quite interesting.
-
-Example:
-
-Player A's "Sangan" is sent from the field to the graveyard. Player A also controls a face-up "Light and Darkness Dragon". Player B controls a "Doomcaliber Knight".
-
-    Because we have 2 mandatory effects, both effects HAVE TO chain to "Sangan's" effect.
-    First, the "Light and Darkness Dragon" from the Turn Player is added to the chain.
-    Chain link 3 is the non-Turn Player's "Doomcaliber Knight", which also activated in response to "Sangan".
-    Resolve: In the resolve, "Doomcaliber Knight" resolves without effect, because negating effects need to be chained directly to the effect they want to negate.
-    Afterwards, "Light and Darkness Dragon" negates "Sangan" after loosing 500 ATK/DEF.
-
-
-Negating effects can only negate those effects that they are directly chained to. "Doomcaliber Knight" is not directly chained to "Sangan", but he is chained to "Light and Darkness Dragon's" effect. "Doomcaliber Knight" cannot simply negate "Light and Darkness Dragon" because he triggered when "Sangan" activated.
-"""
-#this makes me think that for each trigger, I should keep the action(s) that triggered it in memory.
-
-
-#mandatory triggers will be ran through their execute function,
-#while optional triggers will be ran through their corresponding action; 
-#not the one they are matching as an activation condition, but the one 
-#that actually does the Activate and Resolve steps. For example,
-#Seven Tools of the Bandit has a When a trap card is Activated activation condition (implemented through its reqs and trigger.matches),
-#and its action is an instance of ActivateNormalTrap. Its Effect.Activate is to Pay 1000 LP as an activation cost and its 
-#Effect.Resolve is to negate the activation (and if you do destroy it). 
-#The Effect's reqs will include a 'corresponding trigger in the TTR_container' clause.
-
-#So optional triggers should not need to have an execute function.
-
-#But what happens if an optional if-trigger is registered, but cannot be activated (or is not selected by its player) 
-#during the current chain/sequence of events?
-#-if it is because its spell speed is too low and/or the chain is already resolving, we can defer it to a new chain through SEGOC
-#-is it possible for a 'response to an activation'-type effect to use an if-trigger? In that case, a situation where e.g. 
-#the activation requirement is met at chain link 2 but not at chain link 4, while the if-trigger should still activate, would be possible.
-
-"""
-So the algorithm for building a chain could go like this.
-First, we check if another effect is in the simultaneous batch (used by SEGOC and simulateneous mandatory quick-effects; called gamestate.triggers_to_run_in_order) and add it to the chain (and remove it from the batch) if there is one.
-
-(
-If mandatory quick effects are triggered while the current spell speed is at 2 and spell speed 1 effects are registered, the spell speed 1 effects will still
-be registered while the mandatory quick effects will go in the simultaneous batch.
-So that 'placing of mandatory spell speed 2 effects in the simultaneous batch' has to be done in RegisterTriggers.
-
-The spell speed 1 effects will be processed by RunSEGOCTriggers after the current chain resolved, and be transferred to the simultaneous batch after this processing.
-
-I once thought that I could remove the simultaneous batch and just run a condition of 'Mandatory triggers first', but I think that
-the simultaneous batch is still necessary for cases of multiple spell speed 1 effects triggering at the same time for a SEGOC; if no priority is given to themthrough the simultaneous batch, they will be ignored because of the standard spell speed rule (outside of a SEGOC situation, you can only chain spell speed 2 or higher effects).
-)
-
-Next, since all mandatory effects are covered by the simultaneous batch (as explained above), we check for optional effects.
-Registered spell speed 1 if-effects are saved for the next chain (to be built through SEGOC), while when-effects get periodically canceled.
-When-effects that did not miss their timing are given as choices;
-But now the dilemma is that 'do I explicitly ask the player if he wants to activate each effect, or do I just present him his open board?'
-This dilemma is especially troublesome in the case of spell speed 2 optional if-effects (that may miss their timing).
-
-REMEMBER
-- that when-effects can still respond to the event at the base of the chain (before chain link 1)
-- that when-effects can never respond to an event that is part of an activation cost.
-
-So I would need a list of 'events that can currently be responded to'.
-
-BUT ALSO
-
-- when-effects can be grouped together with if-effects in SEGOC chains
-
-"""
-
-def refresh_chainable_when_triggers(gamestate): #This will be run at each chain response window as well as at the start of the SEGOC chain building process
+def refresh_chainable_when_triggers(gamestate): 
+    #This will be run at each chain response window as well as at the start of the SEGOC chain building process
+    #the chainable_optional_when_triggers container will be emptied after these processes
+    #the categories for when triggers : VTP (visible turn player), ITP (invisible turn player), VOP and IOP (for other player)
     for trigger in gamestate.when_triggers:
         full_category = TranslateTriggerCategory(trigger, gamestate)
         for action in gamestate.lastresolvedactions:
@@ -205,8 +121,8 @@ def refresh_chainable_when_triggers(gamestate): #This will be run at each chain 
             if trigger.matches(gamestate.chainlinks[-1], gamestate):
                 gamestate.chainable_optional_when_triggers[full_category].append(trigger)
         
-        #the categories for when triggers : VTP (visible turn player), ITP (invisible turn player), VOP and IOP (for other player)
-        #the container will be emptied after these processes
+        
+        
         
 def clear_chainable_when_triggers(gamestate):
     for category in gamestate.chainable_optional_when_triggers.keys():
@@ -250,10 +166,25 @@ class RunImmediateTriggers(HaltableStep):
             if trigger.matches(self.parentAction, gamestate):
                 trigger.execute(gamestate)
 
+class AddTriggerToTTR(HaltableStep):
+    def __init__(self, trigger):
+        self.trigger = trigger
+
+    def run(self, gamestate):
+        gamestate.triggers_to_run.append(self.trigger)
+
+
+"""
+This step launches the trigger at the start of the triggers_to_run queue
+Every action that builds a chain first checks if there are triggers left
+in this queue and, if there are, they run LaunchTTR instead of asking
+the players if they want to chain other actions.
+"""
 class LaunchTTR(HaltableStep):
 
     def run(self, gamestate):
         #optional if-triggers only have one chance of being activated
+        #and are cancelled by the activation of other triggers
         clear_chainable_if_triggers(gamestate)
 
         #Optional triggers should also have an execute function for this.
@@ -314,7 +245,6 @@ class DestroyCardServer(HaltableStep):
 
     def run(self, gamestate):
         
-        #to do : separate Action subclass for "send to graveyard"
         card = self.args[self.dan]
         player = card.owner
         
@@ -481,9 +411,14 @@ class CreateCard(HaltableStep):
         self.fromzone = self.args[self.zan]
         self.player = self.args['player']
 
-        gamestate.sio.emit('create_card', {'cardid' : str(self.card.ID), 'zone':self.fromzone.name, 
+        gamestate.cards_in_play.append(self.card)
+
+        gamestate.sio.emit('create_card', {'cardid' : str(self.card.ID), 'rotation': "Vertical", 'zone':self.fromzone.name, 
                                             'player' : str(self.player.player_id), 'imgpath' : self.card.imgpath}, 
                                             room="duel" + str(gamestate.duel_id) + "_public_info")
+
+        gamestate.sio.emit('change_card_visibility', {'cardid' : str(self.card.ID), 'visibility' : "1"}, 
+                    room = "duel" + str(gamestate.duel_id) + "_spectator_info")
 
 class EraseCard(HaltableStep):
     def __init__(self, pA, card_arg_name):
@@ -492,6 +427,8 @@ class EraseCard(HaltableStep):
     
     def run(self, gamestate):
         self.card = self.args[self.can]
+        gamestate.cards_in_play.remove(self.card)
+
         gamestate.sio.emit('erase_card', {'cardid' : str(self.card.ID)}, room="duel" + str(gamestate.duel_id) + "_public_info")
 
 class AddCardToChainSendsToGraveyard(HaltableStep):
@@ -527,8 +464,6 @@ class MoveCard(HaltableStep):
         self.card = self.args[self.can]
         self.tozone = self.args[self.zan]
         
-        
-
         gamestate.sio.emit('move_card', {'cardid': str(self.card.ID), 'zone': self.tozone.name}, room="duel" + str(gamestate.duel_id) + "_public_info")
 
         for sid in gamestate.dict_of_sids.values():
@@ -635,6 +570,12 @@ class SetMultipleActionWindow(HaltableStep):
         self.current_phase_or_step = current_phase_or_step
     
     def run(self, gamestate):
+        #Note that refresh_chainable_when_triggers is not run here 
+        #(and a refresh is always followed by a clearing of the chainable triggers container once the window closes),
+        #so when-triggers can only be ran in a response window,
+        #and not from an open game state (represented by the SetMutltipleActionWindow step).
+
+
         gamestate.player_in_multiple_action_window = self.controlling_player
 
         waiting_player = self.controlling_player.other
