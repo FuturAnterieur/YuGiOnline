@@ -20,8 +20,6 @@ thread = None
 
 
 gameStates = {}  #TODO : put this into a managing class
-duel_connected_sids = {}
-duel_spectator_counts = {}
 gameStatesBySid = {}
 
 def index(request):
@@ -174,16 +172,18 @@ def ask_run_action(sid, message):
 
 
 @sio.event
-def move_complete(sid, message):
+def move_complete(sid, message): #this should actually be called animation_complete
    
     duel = get_object_or_404(Duel, pk=int(message['duelid']))
     #theplayer = duel.player_set.get(player_number = int(message['pnum']))
+    already_removed = False
     try:
         gameStates[duel.id].waiting_for_players.remove(sid)
     except KeyError:
-        pass
-
-    if len(gameStates[duel.id].waiting_for_players) == 0:
+        already_removed = True
+        
+    #the already_removed condition check is an attempt to thwart an 'unsolicited response' bug
+    if already_removed == False and len(gameStates[duel.id].waiting_for_players) == 0:
         gameStates[duel.id].stop_waiting_for_players()
         
 

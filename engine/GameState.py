@@ -197,9 +197,12 @@ class GameState:
         self.phase_transition('main_phase_2')
         self.battlephaseended = True
         self.inbattlephase = False
-        self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(gamestate.turnplayer, 'main_phase_2'))
-        self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(gamestate.otherplayer, 'main_phase_2'))
+        self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(self.turnplayer, 'main_phase_2'))
+        self.steps_to_do.append(engine.HaltableStep.SetMultipleActionWindow(self.otherplayer, 'main_phase_2'))
         self.steps_to_do.append(engine.HaltableStep.LetTurnPlayerChooseNextPhase())
+
+        self.keep_running_steps = True
+        self.run_steps()
 
     def set_end_phase(self):
         self.phase_transition('end_phase') #maybe I'll have to create steps for the end phase and turn switch transitions. We'll see.
@@ -362,12 +365,14 @@ class GameState:
         gamestate.replay_was_triggered = True
         
     def stop_waiting_for_players(self):
-        self.keep_running_steps = True
-        self.run_steps()
         for spectator_id in self.spectators_to_refresh_view:
             self.refresh_view(spectator_id)
 
         self.spectators_to_refresh_view.clear()
+
+        self.keep_running_steps = True
+        self.run_steps()
+        
 
     def refresh_view(self, spectator_id):
         self.sio.emit('set_numcards_in_hands', {'0_Hand_numcards': len(self.firstplayer.hand.cards), 

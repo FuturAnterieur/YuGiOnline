@@ -386,6 +386,7 @@ var CardManager = {
 	var theCard = this.cardsById[cardId];
 	if (theCard.zoneId == zoneId)
 	{
+	     console.log('move complete');
 	     this.socket.emit('move_complete', {pnum: this.clientNo, duelid: this.duelid});
 	}
 	else
@@ -576,6 +577,8 @@ var CardManager = {
 			
 		    if (CardManager.moveList.length == CardManager.numberOfCompletedMoves)
 	  	    {
+			console.log('move complete');
+			CardManager.moveList.splice(0, CardManager.moveList.length);
 		    	CardManager.clickMode = CardManager.cachedClickMode;
 		    	CardManager.socket.emit('move_complete', {duelid: CardManager.duelid});
 		    }
@@ -666,5 +669,19 @@ var CardManager = {
 	$('#message').text("");
 	$('#choice_buttons').html("");
 
+    },
+    changeLP : function(player, amount)
+    {
+	console.log('change_LP message with amount ' + amount);
+	var verb = ' lost ';
+	if (amount > 0)
+	{
+	     verb = ' gained ';
+	 }
+	 $("#message").text("Player " + player + verb + amount + " LP.");
+	 var cur_waiter = setTimeout(function () { 
+		 console.log('wait complete');
+		 CardManager.socket.emit('move_complete', {duelid: CardManager.duelid}); 
+	     }, 3000);
     }
 }

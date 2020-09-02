@@ -1051,7 +1051,8 @@ class DuringDamageCalculation(Action):
         list_of_steps = [engine.HaltableStep.RunImmediateTriggers(self),
                         engine.HaltableStep.ProcessIfTriggers(self),
                         engine.HaltableStep.AppendToLRAIfRecording(self),
-                        engine.HaltableStep.PerformDamageCalculation(self),
+                        engine.HaltableStep.PerformDamageCalculation(self, 'loserplayer', 'LPamount'),
+                        engine.HaltableStep.ChangeLifePointsAnimation(self, 'loserplayer', 'LPamount'),
                         engine.HaltableStep.InitAndRunAction(self, MonstersMarkedTriggersForAll, 'this_action'),
                         engine.HaltableStep.RunAction(self, RunTriggers('during_damage_calculation', False)),
                         engine.HaltableStep.ClearLRAIfRecording(self)]

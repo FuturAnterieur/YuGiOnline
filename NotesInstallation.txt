@@ -10,3 +10,6 @@ EssaiDjango/chat_socket).
 Pour que le tout fonctionne dans un nouveau projet nommé YuGiOhOnline1, il a
 fallu modifier le contenu de management/commands/runserver ainsi que --ce fut
 le point tournant-- YuGiOhOnline1/wsgi.
+
+
+

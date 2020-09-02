@@ -4,6 +4,7 @@ import engine.Action
 from engine.TriggerEvent import TriggerEvent
 
 import engine.Effect
+import time
 
 class HaltableStep:
     def __init__(self, parentAction):
@@ -238,6 +239,15 @@ class RunStepIfElseCondition(HaltableStep):
         else:
             self.StepElse.run(gamestate)
 
+class SetArgToValue(HaltableStep):
+    def __init__(self, pA, arg_arg_name, value_arg_name):
+        super(SetArgToValue, self).__init__(pA)
+        self.aan = arg_arg_name
+        self.van = value_arg_name
+
+    def run(self, gamestate):
+        self.args[self.aan] = self.args[self.van]
+
 class DestroyCardServer(HaltableStep):
     def __init__(self, pA, destroyedcard_arg_name):
         super(DestroyCardServer, self).__init__(pA)
@@ -330,16 +340,27 @@ class CallEffectResolve(HaltableStep):
         self.args[self.ean].Resolve(gamestate)
 
 class PerformDamageCalculation(HaltableStep):
+    def __init__(self, pA, loser_arg_name, amount_arg_name):
+        super(PerformDamageCalculation, self).__init__(pA)
+        self.lan = loser_arg_name
+        self.aan = amount_arg_name
+
     def run(self, gamestate):
         target = self.args['target']
         attackingplayer = self.args['player']
         targetplayer = attackingplayer.other
         attackingmonster = self.args['attacking_monster']
 
+        self.args[self.lan] = None
+
         if (target == 'direct_attack'):
             targetplayer.add_life_points(gamestate, -1*attackingmonster.attack)
-            
+            self.args[self.lan] = targetplayer
+            self.args[self.aan] = -1*attackingmonster.attack
+
         else:
+            
+
             targetstat = 0
             
             if target.position == "DEF":
@@ -362,6 +383,9 @@ class PerformDamageCalculation(HaltableStep):
 
                 if losermonster.position == "ATK":
                     losermonster.owner.add_life_points(gamestate, -1*math.fabs(difference))
+                    self.args[self.lan] = losermonster.owner
+                    self.args[self.aan] = -1*math.fabs(difference)
+            
 
 
 
@@ -488,6 +512,25 @@ class RotateCard(HaltableStep):
 
         gamestate.keep_running_steps = False
 
+class ChangeLifePointsAnimation(HaltableStep):
+    def __init__(self, pA, player_arg_name, amount_arg_name):
+        super(ChangeLifePointsAnimation, self).__init__(pA)
+        self.pan = player_arg_name
+        self.aan = amount_arg_name
+
+    def run(self, gamestate):
+        player = self.args[self.pan]
+        amount = self.args[self.aan]
+        if player is not None:
+            gamestate.sio.emit('change_LP', {'player' : str(player.player_id), 'amount': str(amount)}, 
+                                        room="duel" + str(gamestate.duel_id) + "_public_info")
+
+            for sid in gamestate.dict_of_sids.values():
+                gamestate.waiting_for_players.add(sid)
+
+            gamestate.keep_running_steps = False
+
+            #once there will be a more elaborate animation on the client side, it would make more sense to wait for all clients to complete this animation.
 
 class ChooseOccupiedZone(HaltableStep):
     def __init__(self, pA, zonetype, deciding_player_arg_name, target_player_arg_name, chosen_card_arg_name):

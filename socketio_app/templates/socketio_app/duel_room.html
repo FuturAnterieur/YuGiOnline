@@ -312,6 +312,13 @@ $(document).ready(function(){
 	    });	       	
 	});
 
+	socket.on('change_LP', function(msg) {
+             CardManager.changeLP(msg.player, msg.amount);
+	     //For some reason, setTimeout caused a weird unsolicited response bug if I put it in the CardManager.changeLP function
+	     //But wait, it also happens when setTimeout is placed here!
+	
+	});
+
 
 
 	
