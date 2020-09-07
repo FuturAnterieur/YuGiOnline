@@ -12,183 +12,14 @@ canvas {
 
 <script type="text/javascript" src="{% static 'socketio_app/scripts/CardManager.js' %}"></script>
 <script type="text/javascript" src="{% static 'socketio_app/scripts/Card.js' %}"></script>
+<script type="text/javascript" src="{% static 'socketio_app/scripts/GameArea.js' %}"></script>
+<script type="text/javascript" src="{% static 'socketio_app/scripts/Utils.js' %}"></script>
+<script type="text/javascript" src="{% static 'socketio_app/scripts/CardButton.js' %}"></script>
+<script type="text/javascript" src="{% static 'socketio_app/scripts/PhaseButton.js' %}"></script>
 <script type="text/javascript" charset="utf-8">
 
 
 var QuestionCodes = {'choose_position' : 'Summon monster : choose its position.'} 
-
-
-var GameArea = {
-    canvas : document.createElement("canvas"),
-    start : function() {
-
-        this.canvas.width = 900;
-        this.canvas.height = 600;
-        this.context = this.canvas.getContext("2d");
-        document.body.insertBefore(this.canvas, document.body.childNodes[0]);
-
-	window.addEventListener('mousedown', function (e) {
-		GameArea.clicking = true;
-		GameArea.checkClickEvent(e.pageX, e.pageY, 0);
-
-		//during card movement events, clickMode will be set to -1
-	})
-	window.addEventListener('mouseup', function (e) {
-		GameArea.clicking = false;
-		GameArea.checkClickEvent(e.pageX, e.pageY, 1);
-	})
-    },
-
-    checkClickEvent : function(epageX, epageY, clickOrUnclick) {
-		if (CardManager.clickMode == 0)
-		{
-		    CardManager.checkClickCard(epageX, epageY, clickOrUnclick);
-		}
-		else if (CardManager.clickMode == 1)
-		{
-		    CardManager.checkClickCardButton(epageX, epageY, clickOrUnclick);
-		}
-		else if (CardManager.clickMode == 2)
-		{
-		    CardManager.checkClickCard(epageX, epageY, clickOrUnclick);
-		}
-		else if (CardManager.clickMode == 3)
-		{
-		    CardManager.checkClickPhaseButton(epageX, epageY, clickOrUnclick);
-		}
-
-    },
-
-    clear : function() {
-	this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    }
-}
-
-function CoordsAreInsideObject(x,y, obj)
-{
-	var ret = true;
-	if ((obj.bottom < y) || (obj.y > y) || (obj.right < x) || (obj.x > x)) 
-	{
-		ret = false;
-        }
-	return ret;
-}
-
-function GetZoneCoords(zoneId)
-{
-	var targetLocation;
-	var splitzone = zoneId.split("_");
-	if (splitzone[0] == CardManager.perspectiveNo)
-	{
-	    targetLocation = ZoneCoords["my"][splitzone[1]];
-	}
-	else
-	{
-	    targetLocation = ZoneCoords["his"][splitzone[1]];
-	}
-	return targetLocation;
-}
-
-function CardButton(x, y, width, height, text, parentcard)
-{
-    this.text = text;
-    this.parentcard = parentcard;
-
-    this.x = x;
-    this.y = y;
-    this.width = width;
-    this.height = height;
-    this.bottom = this.y + this.height;
-    this.right = this.x + this.width;
-
-    this.isClicked = false;
-
-    this.draw = function ()
-    {
-	ctx = GameArea.context;
-
-	if (this.isClicked == false)
-	{
-		ctx.fillStyle = "blue";
-	}
-	else
-	{
-		ctx.fillStyle = "red";
-	}
-	ctx.fillRect(this.x, this.y, this.width, this.height);
-	
-	ctx.font = "30px Consolas";
-	ctx.fillStyle = "black";
-	ctx.fillText(this.text, this.x, this.y + this.height - 3);
-    }
-
-    this.undraw = function ()
-    {
-	GameArea.context.clearRect(this.x, this.y, this.width, this.height);
-
-    }
-
-}
-
-function Coords(x, y)
-{
-    this.x = x;
-    this.y = y;
-
-    this.substract = function(rhs)
-    {
-	return new Coords(this.x - rhs.x, this.y - rhs.y);
-    }
-}
-
-function PhaseButton(phase_name, pna, x, y)
-{
-    this.x = x;
-    this.y = y;
-
-    this.width = 50;
-    this.height = 35;
-
-    this.bottom = this.y + this.height;
-    this.right = this.x + this.width;
-
-    this.isClicked = false;
-    this.isClickable = false;
-    
-    this.isCurrentPhase = false;
-
-    this.phase_name = phase_name;
-
-    this.text = pna;
-
-    this.draw = function ()
-    {
-	ctx = GameArea.context;
-
-	if(this.isClicked == true)
-	{
-		ctx.fillStyle = "red";
-	}
-	else
-	{
-		ctx.fillStyle = "blue";
-	}
-	
-	ctx.fillRect(this.x, this.y, this.width, this.height);
-	
-	ctx.font = "30px Consolas";
-	ctx.fillStyle = "black";
-	ctx.fillText(this.text, this.x, this.y + 27);
-    }
-
-    
-    this.undraw = function ()
-    {
-	GameArea.context.clearRect(this.x, this.y, this.width, this.height);
-
-    }
-    
-}
 
 
 function getImageFullPath(path)
@@ -314,12 +145,8 @@ $(document).ready(function(){
 
 	socket.on('change_LP', function(msg) {
              CardManager.changeLP(msg.player, msg.amount);
-	     //For some reason, setTimeout caused a weird unsolicited response bug if I put it in the CardManager.changeLP function
-	     //But wait, it also happens when setTimeout is placed here!
 	
 	});
-
-
 
 	
 });
