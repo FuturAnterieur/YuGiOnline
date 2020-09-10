@@ -1,4 +1,4 @@
-#YuGiOh Online
+# YuGiOnline
 
 ## Overview
 
@@ -6,6 +6,8 @@ YuGiOh Online is a work-in-progress implementation of the Yu-Gi-Oh trading card
 game that is playable online through a web browser. I don't plan on
 implementing all the rules of the game as it stands now; I mostly see it as an
 exercise in web programming and system design. 
+
+The main frameworks it uses are Django and python-socketio.
 
 ## Setup 
 
