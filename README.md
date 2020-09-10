@@ -14,9 +14,10 @@ virtual environment necessary to run the program.
 
 To run from the command line on Windows :
 
+cd to the repository's root
 virtualenv venv
-Get the activate batch file full path and run it in the command line to
-activate the virtual environment. Then, in the virtual environment:
+Get the activate batch file full path (it should be in venv/Scripts) and run it in the command line to activate the virtual environment. 
+Then, in the virtual environment:
 pip install -r requirements.txt
 python manage.py makemigrations socketio_app
 python manage.py migrate
