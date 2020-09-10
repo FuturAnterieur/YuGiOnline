@@ -482,17 +482,6 @@ class NormalSummonMonster(SummonMonster):
         
         gamestate.run_steps()
 
-        """
-        engine.HaltableStep.SetSummonNegationWindow(self),
-                        engine.HaltableStep.OpenWindowForResponse(self, 'Summon Negation Window', 
-                            'actionplayer', 'ActionPlayerUsesNegationWindow'),
-                        engine.HaltableStep.RunStepIfCondition(self, 
-                            engine.HaltableStep.OpenWindowForResponse(self, 'Summon Negation Window', 
-                                'otherplayer', 'OtherPlayerUseNegationWindow'), 
-                            RunOtherPlayerWindowCondition, 'ActionPlayerUsesNegationWindow'),
-                        engine.HaltableStep.UnsetSummonNegationWindow(self),
-        """
-
     run_func = default_run
 
 class MonsterWouldBeSummonedTriggers(Action):
@@ -534,59 +523,6 @@ class NormalSummonMonsterCore(Action):
 
         gamestate.run_steps()
 
-
-
-
-class ActivateMonsterEffect(Action):
-    
-    def init(self, gamestate, card, effect):
-        super(ActivateMonsterEffect, self).init("Activate Monster Effect", card)
-        self.effect = effect
-
-    def reqs(self, gamestate): #those reqs are meant for ignition effects, mostly
-        
-        if self.checkbans(gamestate) == False:
-            return False
-        
-        if self.effect.spellspeed == 1 and gamestate.curspellspeed >= 1:
-            return False
-
-        elif self.effect.spellspeed > 1 and gamestate.curspellspeed > self.effect.spellspeed:
-            return False
-
-        if self.card.location != "Field": #some effects can be activated from the graveyard or the hand though
-            return False
-
-        if self.effect.reqs(gamestate) == False:
-            return False
-
-        return True
-
-    def default_run(self, gamestate):
-        #no card to place on the field
-        #gamestate.clear_lra_if_at_no_triggers()
-        cachespellspeed = gamestate.curspellspeed
-        gamestate.curspellspeed = self.effect.spellspeed
-        self.effect.Activate(gamestate)
-        
-        #what about if triggers for "a monster effect has been activated"?
-        
-        gamestate.chained_effects_stack.append(self.effect)
-        open_window_for_response(gamestate, self.player.other)
-        gamestate.chained_effects_stack.pop()
-
-        if self.effect.was_negated == False:
-            gamestate.lastresolvedactions.clear()
-            self.effect.Resolve(gamestate)
-            #the effect will call a sequence of actions, each calling the appropriate run_if_triggers
-            #and placing the correct series of latest actions in gamestate.lastresolvedactions
-
-            self.run_if_triggers(gamestate) #for "A monster effect has been resolved"
-            gamestate.lastresolvedactions.append(self)
-
-        gamestate.curspellspeed = cachespellspeed
-
-    run_func = default_run
 
 class SetSpellTrap(Action):
     

@@ -116,10 +116,6 @@ class GameState:
 
         firstplayer.init_card_actions_and_effects(self)
         otherplayer.init_card_actions_and_effects(self)
-        
-        #self.overridable_actions = {"tribute_monster" : tribute_monster, "draw_card" : draw_card}
-
-        #self.overridable_checks = {"normal_summon_requirements" : normal_summon_requirements}
 
     def startup(self):
         self.has_started = True
