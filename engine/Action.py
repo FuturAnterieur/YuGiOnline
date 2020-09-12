@@ -55,7 +55,7 @@ def TTRNonEmpty(gamestate, args):
 
 """
 The idea with RunTriggersCondition is that a further sequence of events (maybe including a chain) can always
-be launched from the RunTriggers of the pre-existing one. Every time RunTriggers happens, 
+be launched from the RunTriggers of the pre-existing one. Every time a RunTriggers at the end of a sequence of events happens, 
 the outer action stack level is raised by 1.
 """
 def RunTriggersCondition(gamestate, args):
@@ -215,10 +215,11 @@ class RunMAWsAtEnd(Action):
 
 class DrawCard(Action):
     
-    def init(self, player):
+    def init(self, player, in_draw_phase):
         super(DrawCard, self).init("Draw Card", None)
         self.player = player
         self.args = {'player' : player, 'fromzone' : player.deckzone, 'tozone' : player.hand}
+        self.in_draw_phase = in_draw_phase
 
     def reqs(self, gamestate):
         if len(self.player.deckzone.cards) > 0:
@@ -229,14 +230,20 @@ class DrawCard(Action):
     def default_run(self, gamestate):
         list_of_steps = None
         if self.reqs(gamestate):
+            run_triggers_step = engine.HaltableStep.RunStepIfCondition(self, 
+                            engine.HaltableStep.RunAction(self, RunTriggers('Spell/Trap set')), 
+                            RunTriggersCondition) if self.in_draw_phase == False else engine.HaltableStep.DoNothing(self)
+
             list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                             engine.HaltableStep.DrawCardServer(self, 'drawncard'),
+                            engine.HaltableStep.StopDuelIfVictoryCondition(self),
                             engine.HaltableStep.CreateCard(self, 'drawncard', 'fromzone'),
                             engine.HaltableStep.ChangeCardVisibility(self, ['player'], 'drawncard', '1'),
                             engine.HaltableStep.MoveCard(self, 'drawncard', 'tozone'),
                             engine.HaltableStep.ProcessIfTriggers(self),
                             engine.HaltableStep.AppendToLRAIfRecording(self),
                             engine.HaltableStep.RunImmediateTriggers(self),
+                            run_triggers_step,
                             engine.HaltableStep.PopActionStack(self)] #add a run triggers conditional step here?
         
             for i in range(len(list_of_steps) - 1, -1, -1):
@@ -989,6 +996,7 @@ class DuringDamageCalculation(Action):
                         engine.HaltableStep.AppendToLRAIfRecording(self),
                         engine.HaltableStep.PerformDamageCalculation(self, 'loserplayer', 'LPamount'),
                         engine.HaltableStep.ChangeLifePointsAnimation(self, 'loserplayer', 'LPamount'),
+                        engine.HaltableStep.StopDuelIfVictoryCondition(self),
                         engine.HaltableStep.InitAndRunAction(self, MonstersMarkedTriggersForAll, 'this_action'),
                         engine.HaltableStep.RunAction(self, RunTriggers('during_damage_calculation', False)),
                         engine.HaltableStep.ClearLRAIfRecording(self)]

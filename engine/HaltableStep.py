@@ -271,9 +271,15 @@ class DrawCardServer(HaltableStep):
 
     def run(self, gamestate):
         drawncard = self.args['player'].deckzone.pop_card()
-        self.args['player'].hand.add_card(drawncard)
-        drawncard.face_up = FACEUPTOCONTROLLER
-        self.args[self.dan] = drawncard
+
+        if drawncard is not None:
+            self.args['player'].hand.add_card(drawncard)
+            drawncard.face_up = FACEUPTOCONTROLLER
+            self.args[self.dan] = drawncard
+
+        else:
+            gamestate.end_condition_reached = True
+            gamestate.winners.append(self.args['player'].other)
 
         print("Player " + str(self.args['player'].player_id) + " has drawn " + drawncard.name)
 
@@ -397,6 +403,8 @@ class PopChainLinks(HaltableStep):
     def run(self, gamestate):
         gamestate.chainlinks.pop()
 
+
+#is_building_a_chain is checked at the processing of if-triggers to know if the trigger's effect can be chained immediately or not
 class SetBuildingChain(HaltableStep):
     def run(self, gamestate):
         gamestate.is_building_a_chain = True
@@ -410,19 +418,35 @@ class LowerOuterActionStackLevel(HaltableStep):
     def run(self, gamestate):
         gamestate.outer_action_stack_level -= 1
         
-class SetSummonNegationWindow(HaltableStep):
-    def __init__(self, pA):
-        super(SetSummonNegationWindow, self).__init__(pA)
+class AddCardToChainSendsToGraveyard(HaltableStep):
+    def __init__(self, pA, card_arg_name):
+        super(AddCardToChainSendsToGraveyard, self).__init__(pA)
+        self.can = card_arg_name
 
     def run(self, gamestate):
-        gamestate.insummonnegationwindow = self.parentAction
+        card = self.args[self.can]
+        gamestate.cards_chain_sends_to_graveyard.append({'card' : card, 'was_negated' : self.parentAction.was_negated})
 
-class UnsetSummonNegationWindow(HaltableStep):
-    def __init__(self, pA):
-        super(UnsetSummonNegationWindow, self).__init__(pA)
+def stop_duel(gamestate):
+    gamestate.steps_to_do.clear()
+    winner_id = gamestate.winners[0].player_id if len(gamestate.winners) == 1 else "Draw"
+    gamestate.sio.emit('end_duel', {'winner' : str(winner_id)}, room = "duel" + str(gamestate.duel_id) + "_public_info")
 
+class StopDuelIfVictoryCondition(HaltableStep):
     def run(self, gamestate):
-        gamestate.insummonnegationwindow = None
+        if (gamestate.end_condition_reached and gamestate.can_end_now):
+            stop_duel(gamestate)
+
+class SetCanEndNowToFalse(HaltableStep):
+    def run(self, gamestate):
+        gamestate.can_end_now = False
+
+class SetCanEndNowToTrue(HaltableStep):
+    def run(self, gamestate):
+        gamestate.can_end_now == True
+        if (gamestate.end_condition_reached):
+            stop_duel(gamestate)
+            
 
 class CreateCard(HaltableStep):
     def __init__(self, pA, card_arg_name, zone_arg_name):
@@ -455,14 +479,7 @@ class EraseCard(HaltableStep):
 
         gamestate.sio.emit('erase_card', {'cardid' : str(self.card.ID)}, room="duel" + str(gamestate.duel_id) + "_public_info")
 
-class AddCardToChainSendsToGraveyard(HaltableStep):
-    def __init__(self, pA, card_arg_name):
-        super(AddCardToChainSendsToGraveyard, self).__init__(pA)
-        self.can = card_arg_name
 
-    def run(self, gamestate):
-        card = self.args[self.can]
-        gamestate.cards_chain_sends_to_graveyard.append({'card' : card, 'was_negated' : self.parentAction.was_negated})
 
 class ChangeCardVisibility(HaltableStep):
     def __init__(self, pA, list_of_player_arg_names, card_arg_name, visibility):
@@ -530,7 +547,7 @@ class ChangeLifePointsAnimation(HaltableStep):
 
             gamestate.keep_running_steps = False
 
-            #once there will be a more elaborate animation on the client side, it would make more sense to wait for all clients to complete this animation.
+            #there will be a more elaborate animation on the client side
 
 class ChooseOccupiedZone(HaltableStep):
     def __init__(self, pA, zonetype, deciding_player_arg_name, target_player_arg_name, chosen_card_arg_name):

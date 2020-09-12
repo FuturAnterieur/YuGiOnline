@@ -33,6 +33,6 @@ class Player:
         self.lifepoints += amount
         print("Player" + str(self.player_id) + "'s lifepoints are now at " + str(self.lifepoints))
         if(self.lifepoints <= 0):
-            
-            gamestate.winner = self.other
+            gamestate.end_condition_reached = True
+            gamestate.winners.append(self.other)
         

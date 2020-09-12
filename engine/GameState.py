@@ -76,7 +76,47 @@ class GameState:
         self.monstersthatattackedthisturn = []
         self.monsters_to_be_destroyed_by_battle = []
 
-        self.winner = None
+        self.winners = []
+        self.end_condition_reached = False
+        self.can_end_now = False
+
+        """
+        Example scenario : 
+        A single card effect causes both players to add all 5 pieces of "Exodia" to their hand, like 'Card Destruction'.
+
+        In Exodia's effect, there is an immediate trigger for the Draw Action that does three things :
+            - it sets gamestate.end_condition_reached to True
+            - it appends the Exodia piece's owner to gamestate.winners
+            - it adds a StopDuelIfVictoryConditionCheck to the left of the gamestate.steps_to_do deque.
+              This covers the simple case where a single player draws one card and just happens to get the missing piece of Exodia.
+
+        In Card Destruction's effect's resolve, 
+            there is a first set of discard actions that all happen simultaneously,
+            then there is a set of draw actions that all happen simultaneously.
+
+        This simultaneity, in regards to knowing when to end the duel, will be implemented through 
+        the can_end_now variable. (there will also be a clear of LastResolvedActions between the set 
+        of discards and the set of draws for the when-effects that they may trigger).
+
+        Basically, the program structure will go like this :
+            gamestate.can_end_now = False
+            for i in range(n)
+                steps.append(RunAction - Discard)
+
+            
+
+            for i in range(n)
+                steps.append(RunTheAction - Draw)
+                
+            steps.append(SetCanEndNowToTrue)
+            
+            and SetCanEndNowToTrue checks if the end condition was reached and stops the duel if it did.
+
+        As far as I know, only a card effect can make several events happen 'exactly at the same time' (without first putting
+        them on a chain, as in SEGOC) and, as such, will represent the only case of can_end_now being set to false.
+            
+
+        """
         
         self.phases = []
         self.steps_to_do = deque()
