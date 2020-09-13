@@ -49,10 +49,11 @@ The system was only tested on Windows up to now.
 - Basic phases of a turn 
 - The different steps of the battle phase
 - Support for creating effects that can respond to each other
+- End of duel, including the groundwork for situations where a draw occurs
 - A few monsters and one trap card, Trap Hole, have been coded
 
 ## Notable things that are not implemented yet
 
 - Capacity to create a user account
 - Deck builder feature
-- End of a duel (either by winning of forfeiting)
+- End the duel when a player leaves the duel room
