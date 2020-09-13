@@ -279,9 +279,8 @@ class DrawCardServer(HaltableStep):
 
         else:
             gamestate.end_condition_reached = True
-            gamestate.winners.append(self.args['player'].other)
+            gamestate.add_player_to_winners(self.args['player'].other)
 
-        print("Player " + str(self.args['player'].player_id) + " has drawn " + drawncard.name)
 
 
 class NSMCServer(HaltableStep): #NormalSummonMonsterCoreServer
@@ -427,15 +426,11 @@ class AddCardToChainSendsToGraveyard(HaltableStep):
         card = self.args[self.can]
         gamestate.cards_chain_sends_to_graveyard.append({'card' : card, 'was_negated' : self.parentAction.was_negated})
 
-def stop_duel(gamestate):
-    gamestate.steps_to_do.clear()
-    winner_id = gamestate.winners[0].player_id if len(gamestate.winners) == 1 else "Draw"
-    gamestate.sio.emit('end_duel', {'winner' : str(winner_id)}, room = "duel" + str(gamestate.duel_id) + "_public_info")
 
 class StopDuelIfVictoryCondition(HaltableStep):
     def run(self, gamestate):
         if (gamestate.end_condition_reached and gamestate.can_end_now):
-            stop_duel(gamestate)
+            gamestate.stop_duel()
 
 class SetCanEndNowToFalse(HaltableStep):
     def run(self, gamestate):
@@ -445,7 +440,7 @@ class SetCanEndNowToTrue(HaltableStep):
     def run(self, gamestate):
         gamestate.can_end_now == True
         if (gamestate.end_condition_reached):
-            stop_duel(gamestate)
+            gamestate.stop_duel()
             
 
 class CreateCard(HaltableStep):

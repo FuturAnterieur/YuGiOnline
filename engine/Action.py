@@ -215,43 +215,39 @@ class RunMAWsAtEnd(Action):
 
 class DrawCard(Action):
     
-    def init(self, player, in_draw_phase):
+    def init(self, player, in_draw_phase = True):
         super(DrawCard, self).init("Draw Card", None)
         self.player = player
         self.args = {'player' : player, 'fromzone' : player.deckzone, 'tozone' : player.hand}
         self.in_draw_phase = in_draw_phase
 
-    def reqs(self, gamestate):
+    def reqs(self, gamestate): #unused in the current version
         if len(self.player.deckzone.cards) > 0:
             return True
         else:
             return False
 
     def default_run(self, gamestate):
-        list_of_steps = None
-        if self.reqs(gamestate):
-            run_triggers_step = engine.HaltableStep.RunStepIfCondition(self, 
-                            engine.HaltableStep.RunAction(self, RunTriggers('Spell/Trap set')), 
-                            RunTriggersCondition) if self.in_draw_phase == False else engine.HaltableStep.DoNothing(self)
+        run_triggers_step = engine.HaltableStep.RunStepIfCondition(self, 
+                        engine.HaltableStep.RunAction(self, RunTriggers('Spell/Trap set')), 
+                        RunTriggersCondition) if self.in_draw_phase == False else engine.HaltableStep.DoNothing(self)
 
-            list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
-                            engine.HaltableStep.DrawCardServer(self, 'drawncard'),
-                            engine.HaltableStep.StopDuelIfVictoryCondition(self),
-                            engine.HaltableStep.CreateCard(self, 'drawncard', 'fromzone'),
-                            engine.HaltableStep.ChangeCardVisibility(self, ['player'], 'drawncard', '1'),
-                            engine.HaltableStep.MoveCard(self, 'drawncard', 'tozone'),
-                            engine.HaltableStep.ProcessIfTriggers(self),
-                            engine.HaltableStep.AppendToLRAIfRecording(self),
-                            engine.HaltableStep.RunImmediateTriggers(self),
-                            run_triggers_step,
-                            engine.HaltableStep.PopActionStack(self)] #add a run triggers conditional step here?
-        
-            for i in range(len(list_of_steps) - 1, -1, -1):
-                gamestate.steps_to_do.appendleft(list_of_steps[i])
-        
-            gamestate.run_steps()
-        else:
-            gamestate.end_duel(self.player.other)
+        list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
+                        engine.HaltableStep.DrawCardServer(self, 'drawncard'),
+                        engine.HaltableStep.StopDuelIfVictoryCondition(self),
+                        engine.HaltableStep.CreateCard(self, 'drawncard', 'fromzone'),
+                        engine.HaltableStep.ChangeCardVisibility(self, ['player'], 'drawncard', '1'),
+                        engine.HaltableStep.MoveCard(self, 'drawncard', 'tozone'),
+                        engine.HaltableStep.ProcessIfTriggers(self),
+                        engine.HaltableStep.AppendToLRAIfRecording(self),
+                        engine.HaltableStep.RunImmediateTriggers(self),
+                        run_triggers_step,
+                        engine.HaltableStep.PopActionStack(self)] #add a run triggers conditional step here?
+    
+        for i in range(len(list_of_steps) - 1, -1, -1):
+            gamestate.steps_to_do.appendleft(list_of_steps[i])
+    
+        gamestate.run_steps()
 
     run_func = default_run
 

@@ -148,6 +148,23 @@ $(document).ready(function(){
 	
 	});
 
+	socket.on('end_duel', function(msg) {
+		CardManager.clickMode = -1;
+		var endstr = "The duel ended";
+		if (msg.winner != "DRAW")
+		{
+		    endstr += ". The winner was " + msg.winner + ".";
+		}
+		else 
+		{
+		    endstr += " in a draw.";
+		}
+		$("#message").text(endstr);
+		button_html = "<a href=\"{% url 'socketio_app:index' %}\">Leave the duel room</a>";
+		$("#choice_buttons").html(button_html);
+		
+	});
+
 	
 });
 
@@ -160,4 +177,6 @@ $(document).ready(function(){
 
 <p id="message"></p>
 <p id="choice_buttons"></p>
+
+
 {% endblock %}

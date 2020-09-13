@@ -78,7 +78,7 @@ class GameState:
 
         self.winners = []
         self.end_condition_reached = False
-        self.can_end_now = False
+        self.can_end_now = True
 
         """
         Example scenario : 
@@ -307,11 +307,7 @@ class GameState:
         elif self.step_waiting_for_answer.__class__.__name__ == "AskQuestion":
             self.keep_running_steps = True
             self.run_steps()
-
-
-    def end_duel(self, winner):
-        self.curphase = "Duel ended"
-        self.sio.emit('end_duel', {'winner' : str(winner.player_id)}, room="duel" + str(self.duel_id) + "_public_info")
+    
     
 
     def reset_turn_variables(self):
@@ -429,7 +425,15 @@ class GameState:
             self.sio.emit('change_card_visibility', {'cardid' : str(card.ID), 'visibility' : "1"}, 
                     room = "duel" + str(self.duel_id) + "_spectator" + str(spectator_id) + "_info")
 
-        
+    def add_player_to_winners(self, winner):
+        if winner not in self.winners:
+            self.winners.append(winner)
+
+    def stop_duel(self):
+        self.steps_to_do.clear()
+        winner_id = self.winners[0].player_id if len(self.winners) == 1 else "DRAW"
+        self.sio.emit('end_duel', {'winner' : str(winner_id)}, room = "duel" + str(self.duel_id) + "_public_info")
+
         
 
 def get_default_gamestate(sio, duel_id):
