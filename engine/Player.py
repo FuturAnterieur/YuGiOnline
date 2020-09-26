@@ -2,21 +2,38 @@ import engine.Zones as Zones
 import math
 
 class Player:
-    def __init__(self, pid):
+    def __init__(self, pid, gamestate):
+        
+        self.gamestate = gamestate
+
+        self.monsters_on_field = []
+        self.spelltraps_on_field = []
+
         self.player_id = pid
         strpid = str(pid)
-        self.deckzone = Zones.Zone(strpid + "_Deck", 50, self)
-        self.hand = Zones.Hand(strpid + "_Hand",  self)
-        self.monsterzones = Zones.FieldZoneArray(strpid + "_Monster", self, 5)
-        self.spelltrapzones = Zones.FieldZoneArray(strpid + "_Spelltrap", self, 5) 
+        self.deckzone = self.register_zone(Zones.Zone(strpid + "_Deck", 50, self, "Deck"))
+        self.hand = self.register_zone(Zones.Hand(strpid + "_Hand",  self))
+        self.monsterzones = self.register_zone_array(Zones.FieldZoneArray(strpid + "_Monster", self, 5, self.monsters_on_field))
+        self.spelltrapzones = self.register_zone_array(Zones.FieldZoneArray(strpid + "_Spelltrap", self, 5, self.spelltraps_on_field)) 
+        
         self.pendulumlowzone = self.spelltrapzones.listofzones[0]
         self.pendulumhighzone = self.spelltrapzones.listofzones[4]
-        self.graveyard = Zones.Graveyard(strpid + "_GY", self)
-        self.fieldzone = Zones.Zone(strpid + "_Field", 1, self)
+        self.graveyard = self.register_zone(Zones.Graveyard(strpid + "_GY", self))
+        self.banished = self.register_zone(Zones.Banished(strpid + "_Banished", self))
+        self.fieldzone = self.register_zone(Zones.Zone(strpid + "_Field", 1, self, "FieldSpell"))
         self.lifepoints = 1000
         self.other = None
         self.normalsummonsperturn = 1
         self.gamestate = None
+
+    def register_zone(self, zone):
+        self.gamestate.zonesByName[zone.name] = zone
+        return zone
+
+    def register_zone_array(self, zoneArray):
+        for zone in zoneArray.listofzones:
+            self.gamestate.zonesByName[zone.name] = zone
+        return zoneArray
 
     def give_deck(self, listofcards):
         for card in listofcards:

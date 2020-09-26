@@ -9,21 +9,6 @@ function CoordsAreInsideObject(x,y, obj)
 	return ret;
 }
 
-function GetZoneCoords(zoneId)
-{
-	var targetLocation;
-	var splitzone = zoneId.split("_");
-	if (splitzone[0] == CardManager.perspectiveNo)
-	{
-	    targetLocation = ZoneCoords["my"][splitzone[1]];
-	}
-	else
-	{
-	    targetLocation = ZoneCoords["his"][splitzone[1]];
-	}
-	return targetLocation;
-}
-
 function Coords(x, y)
 {
     this.x = x;
@@ -33,4 +18,17 @@ function Coords(x, y)
     {
 	return new Coords(this.x - rhs.x, this.y - rhs.y);
     }
+}
+
+function Zone(prefix, clientNo, name, x, y, width, height)
+{
+	this.localName = prefix + "_" + name;
+	this.globalName = clientNo + "_" + name;
+
+	this.x = x;
+	this.y = y;
+	this.width = width;
+	this.height = height;
+	this.bottom = this.y + this.height;
+	this.right = this.x + this.width;
 }

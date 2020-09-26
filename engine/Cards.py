@@ -1,5 +1,6 @@
 import engine.Effect as Effect
 import engine.Action as Action
+import engine.ActionsSpellTrap as ActionsSpellTrap
 
 cardcounter = 0
 
@@ -48,7 +49,7 @@ class MonsterCard(Card):
         self.defense = defense
         self.originaldefense = defense
         self.monsterclass = monsterclass
-        self.effect = effect
+        self.effects = []
         
         self.numtributesrequired = 0
         self.position = "None"
@@ -59,8 +60,8 @@ class MonsterCard(Card):
         self.actiondict["Normal Summon"] = Action.NormalSummonMonster()
         self.actiondict["Attack"] = Action.DeclareAttack()
         
-        if self.effect is not None:
-            if self.effect.type == "Ignition":
+        for effect in self.effects:
+            if effect.type == "Ignition":
                 self.actiondict["Activate Effect"] = Action.ActivateMonsterEffect()
 
     def init_actions_and_effects(self, gamestate): #this function can be used at game initialization and when the card's controller changes.
@@ -68,9 +69,9 @@ class MonsterCard(Card):
         self.actiondict["Normal Summon"].init(self)
         self.actiondict["Attack"].init(self)
 
-        if self.effect != None:
-            self.effect.init(gamestate, self)
-            if self.effect.type == "Ignition":
+        for effect in self.effects:
+            effect.init(gamestate, self)
+            if effect.type == "Ignition":
                 self.actiondict["Activate Effect"].init(gamestate, self, self.effect)
 
 
@@ -89,7 +90,7 @@ class SpellTrapCard(Card):
         self.wassetthisturn = False
         self.spelltrapsubclass = subclass
         self.effect = effect
-        self.actiondict["Set"] = Action.SetSpellTrap()
+        self.actiondict["Set"] = ActionsSpellTrap.SetSpellTrap()
         
 
     def init_actions_and_effects(self, gamestate):
@@ -100,19 +101,18 @@ class SpellTrapCard(Card):
 class TrapCard(SpellTrapCard):
     def __init__(self, name, text, effect, imgpath):
         super(TrapCard, self).__init__(name, "Normal Trap", text, effect, imgpath)
-        self.actiondict["Activate"] = Action.ActivateNormalTrap()
+        self.actiondict["Activate"] = ActionsSpellTrap.ActivateNormalTrap()
 
 
     def init_actions_and_effects(self, gamestate):
         super(TrapCard, self).init_actions_and_effects(gamestate)
         self.actiondict["Activate"].init(self, self.effect)
 
-
 class ContinuousSpellCard(SpellTrapCard):
     def __init__(self, name, text, effect, imgpath):
         super(ContinuousSpellCard, self).__init__(name, "Continuous Spell", text, effect, imgpath)
         if effect.type == "Passive":
-            self.actiondict["Activate"] = Action.ActivateContinuousPassiveSpell()
+            self.actiondict["Activate"] = ActionsSpellTrap.ActivateContinuousPassiveSpell()
 
     def init_actions_and_effects(self, gamestate):
         super(ContinuousSpellCard, self).init_actions_and_effects(gamestate)

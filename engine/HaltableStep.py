@@ -1,9 +1,7 @@
-from engine.Cards import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT
-
-import engine.Action
+from engine.defs import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT
 from engine.TriggerEvent import TriggerEvent
 
-import engine.Effect
+from engine.Effect import MatchOnADC
 import time
 
 class HaltableStep:
@@ -96,7 +94,7 @@ class ProcessFlipTriggers(HaltableStep):
             if trigger.matches(self.parentAction, gamestate):
                 #if we are in the damage step, the flip effect triggers at After Damage Calculation
                 if gamestate.curphase == "battle_phase" and gamestate.current_battle_phase_step == "damage_step":
-                    trigger.effect.ADC_trigger = TriggerEvent("FlipTriggerADC", trigger.card, trigger.effect, 'if', trigger.category, engine.Effect.MatchOnADC) 
+                    trigger.effect.ADC_trigger = TriggerEvent("FlipTriggerADC", trigger.card, trigger.effect, 'if', trigger.category, MatchOnADC) 
                     #to see how MatchOnADC works, check out the TestFunctionOutsideOfClass.py file
                     trigger.effect.ADC_trigger.funclist.extend([trigger.effect.RemoveADCTriggerFromIfTriggers] + trigger.funclist)
                     gamestate.if_triggers.append(trigger.effect.ADC_trigger)
@@ -263,6 +261,24 @@ class DestroyCardServer(HaltableStep):
         
         player.graveyard.add_card(card)
 
+class ChangeCardZoneServer(HaltableStep):
+    def __init__(self, pA, card_arg_name, tozone_arg_name):
+        super().__init__(pA)
+        self.can = card_arg_name
+        self.tzan = tozone_arg_name
+
+    def run(self, gamestate):
+        card = self.args[self.can]
+        tozone = self.args[self.tzan]
+
+        fromzone = card.zone
+        if fromzone.type == "Field":
+            card.zonearray.pop_card(card.zone.zonenum)
+        else:
+            card.zone.remove_card(card)
+
+        tozone.add_card(card)
+
 
 class DrawCardServer(HaltableStep):
     def __init__(self, pA, drawncard_arg_name):
@@ -299,30 +315,38 @@ class NSMCServer(HaltableStep): #NormalSummonMonsterCoreServer
         summonedmonster.position = self.args[self.pan]
         
 class SetSpellTrapServer(HaltableStep):
-    def __init__(self, pA, card_arg_name):
+    def __init__(self, pA, card_arg_name, chosen_zone_arg_name):
         super(SetSpellTrapServer, self).__init__(pA)
         self.can = card_arg_name
+        self.czan = chosen_zone_arg_name
 
     def run(self, gamestate):
         card = self.args[self.can]
+        zone = self.args[self.czan]
         player = card.owner
         player.hand.remove_card(card)
         
         card.face_up = FACEDOWN
 
-        chosenzonenum = 3
+        chosenzonenum = zone.zonenum
         player.spelltrapzones.add_card(card, chosenzonenum)
         card.wassetthisturn = True
 
-class ActivateNormalTrapBeforeActivate(HaltableStep):
-    def __init__(self, pA, card_arg_name, effect_arg_name):
-        super(ActivateNormalTrapBeforeActivate, self).__init__(pA)
+class ActivateSpellTrapBeforeActivate(HaltableStep):
+    def __init__(self, pA, card_arg_name, effect_arg_name, zone_arg_name = None):
+        super().__init__(pA)
         self.can = card_arg_name
         self.ean = effect_arg_name
+        self.zan = zone_arg_name
 
     def run(self, gamestate):
         card = self.args[self.can]
         effect = self.args[self.ean]
+        if self.zan is not None:
+            newzone = self.args[self.zan]
+            if newzone is not None:
+                card.zone.remove_card(card)
+                card.owner.spelltrapzones.add_card(card, newzone.zonenum)
 
         gamestate.curspellspeed = effect.spellspeed
 
@@ -392,6 +416,9 @@ class PerformDamageCalculation(HaltableStep):
                     self.args[self.aan] = -1*math.fabs(difference)
             
 
+class SetAttackDeclaredActionToNone(HaltableStep):
+    def run(self, gamestate):
+        gamestate.attack_declared_action = None
 
 
 class AppendToChainLinks(HaltableStep):
@@ -545,22 +572,42 @@ class ChangeLifePointsAnimation(HaltableStep):
             #there will be a more elaborate animation on the client side
 
 class ChooseOccupiedZone(HaltableStep):
-    def __init__(self, pA, zonetype, deciding_player_arg_name, target_player_arg_name, chosen_card_arg_name):
+    def __init__(self, pA, deciding_player_arg_name, card_choice_list_arg_name, chosen_card_arg_name):
         super(ChooseOccupiedZone, self).__init__(pA)
-        self.zonetype = zonetype
         self.dpan = deciding_player_arg_name
-        self.tpan = target_player_arg_name
+        self.cclan = card_choice_list_arg_name
         self.ccan = chosen_card_arg_name
 
     def run(self, gamestate):
         deciding_player = self.args[self.dpan]
-        target_player = self.args[self.tpan]
-        
-        gamestate.sio.emit('choose_card', {'zonetype' : self.zonetype, 'target_player' : str(target_player.player_id)},
+        card_list = self.args[self.cclan]
+        cardid_list = [card.ID for card in card_list]
+        #TODO : Change the javascript to match this
+        gamestate.sio.emit('choose_card', {'choices' : cardid_list},
                                         room =  "duel" + str(gamestate.duel_id) + "_player" + str(deciding_player.player_id) + "_info")
 
-        gamestate.action_waiting_for_a_card_choice = self.parentAction
+        gamestate.action_waiting_for_a_choice = self.parentAction
         gamestate.answer_arg_name = self.ccan
+        gamestate.keep_running_steps = False
+
+class ChooseFreeZone(HaltableStep):
+    def __init__(self, pA, deciding_player_arg_name, zone_choice_list_arg_name, chosen_zone_arg_name):
+        super().__init__(pA)
+        self.dpan = deciding_player_arg_name
+        self.zclan = zone_choice_list_arg_name
+        self.czan = chosen_zone_arg_name
+
+    def run(self, gamestate):
+        deciding_player = self.args[self.dpan]
+        zone_list = self.args[self.zclan]
+        zone_name_list = [zone.name for zone in zone_list]
+        
+        gamestate.sio.emit('choose_zone', {'choices' : zone_name_list}, 
+                     room = "duel" + str(gamestate.duel_id) + "_player" + str(deciding_player.player_id) + "_info")
+
+
+        gamestate.action_waiting_for_a_choice = self.parentAction
+        gamestate.answer_arg_name = self.czan
         gamestate.keep_running_steps = False
 
 class AskQuestion(HaltableStep):

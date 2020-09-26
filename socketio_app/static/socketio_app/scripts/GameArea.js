@@ -1,10 +1,10 @@
 
 var GameArea = {
     canvas : document.createElement("canvas"),
-    start : function() {
+    start : function(width, height) {
 
-        this.canvas.width = 900;
-        this.canvas.height = 600;
+        this.canvas.width = width;
+        this.canvas.height = height;
         this.context = this.canvas.getContext("2d");
         document.body.insertBefore(this.canvas, document.body.childNodes[0]);
 
@@ -36,6 +36,11 @@ var GameArea = {
 		else if (CardManager.clickMode == 3)
 		{
 		    CardManager.checkClickPhaseButton(epageX, epageY, clickOrUnclick);
+		}
+	    	else if (CardManager.clickMode == 4)
+		{
+		     CardManager.checkClickZone(epageX, epageY, clickOrUnclick);
+
 		}
 
     },

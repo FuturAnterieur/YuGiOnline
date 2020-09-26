@@ -2,7 +2,7 @@
 function Card(zoneId, face_up, rotation, src, manager, ownerNo, id, indexInArray)
 {
     this.zoneId = zoneId;
-    var Coords;
+    var coords;
     if(zoneId == '0_Hand' || zoneId == '1_Hand')
     {
 	var totalNumCardsInHand;
@@ -24,10 +24,11 @@ function Card(zoneId, face_up, rotation, src, manager, ownerNo, id, indexInArray
     }
     else
     {
-         Coords = GetZoneCoords(zoneId);
+	 var zone = manager.getZone(zoneId);
+         coords = new Coords(zone.x, zone.y);
     }
-    this.x = Coords.x;
-    this.y = Coords.y;
+    this.x = coords.x;
+    this.y = coords.y;
     
     this.manager = manager;
     this.ownerNo = ownerNo;
@@ -44,7 +45,7 @@ function Card(zoneId, face_up, rotation, src, manager, ownerNo, id, indexInArray
 
     this.scale = 1.0;
     this.width = this.manager.cardWidth;
-    this.height = 88;
+    this.height = this.manager.cardHeight;
 
     this.rotation = rotation; //"Vertical" or "Horizontal"
 
@@ -94,3 +95,5 @@ function Card(zoneId, face_up, rotation, src, manager, ownerNo, id, indexInArray
     }
 
 }
+
+

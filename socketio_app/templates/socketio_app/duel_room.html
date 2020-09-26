@@ -9,11 +9,10 @@ canvas {
     background-color: #f1f1f1;
 }
 </style>
-
+<script type="text/javascript" src="{% static 'socketio_app/scripts/Utils.js' %}"></script>
 <script type="text/javascript" src="{% static 'socketio_app/scripts/CardManager.js' %}"></script>
 <script type="text/javascript" src="{% static 'socketio_app/scripts/Card.js' %}"></script>
 <script type="text/javascript" src="{% static 'socketio_app/scripts/GameArea.js' %}"></script>
-<script type="text/javascript" src="{% static 'socketio_app/scripts/Utils.js' %}"></script>
 <script type="text/javascript" src="{% static 'socketio_app/scripts/CardButton.js' %}"></script>
 <script type="text/javascript" src="{% static 'socketio_app/scripts/PhaseButton.js' %}"></script>
 <script type="text/javascript" charset="utf-8">
@@ -31,9 +30,12 @@ function getImageFullPath(path)
 $(document).ready(function(){
 	var socket = io.connect();
 	
-	CardManager.start(socket, '{{ player_number|escapejs }}', '{{ duel.id|escapejs }}');
+	var width = 900;
+	var height = 600;
 
-	GameArea.start();
+	CardManager.start(socket, '{{ player_number|escapejs }}', '{{ duel.id|escapejs }}', width, height);
+
+	GameArea.start(width, height);
 	
 	CardManager.drawPhaseButtons();
 
@@ -77,7 +79,11 @@ $(document).ready(function(){
 	});
 
 	socket.on('choose_card', function(msg) {
-		CardManager.enterChooseTargetCardMode(msg.zonetype, msg.target_player);
+		CardManager.enterChooseTargetCardMode(msg.choices);
+	});
+
+	socket.on('choose_zone', function(msg) {
+		CardManager.enterChooseZoneMode(msg.choices);
 	});
 
 	socket.on('phase_change', function(msg) {

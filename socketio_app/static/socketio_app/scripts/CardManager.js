@@ -1,7 +1,7 @@
 
-var ZoneCoords = {'my': {}, 'his': {} };
+
 var CardManager = {
-    start : function(socket, clientnumber, duelid) 
+    start : function(socket, clientnumber, duelid, canvas_width, canvas_height) 
     {
 	this.turnplayer = '0';
 	this.clientNo = clientnumber;
@@ -25,6 +25,10 @@ var CardManager = {
 	this.numIntervals = 0;
 
 	this.cardWidth = 60;
+	this.cardHeight = 88;
+
+	this.zoneWidth = 70;
+	this.zoneHeight = 92;
 	
 	this.phaseButtons = [new PhaseButton('draw_phase', 'DP', 200, 285), 
 				new PhaseButton('standby_phase', 'SP', 300, 285),
@@ -36,18 +40,44 @@ var CardManager = {
 
 	this.PhaseFunctions = new Object();    
 
-	ZoneCoords["my"]["Deck"] = new Coords(750, 500);
-	ZoneCoords["my"]["GY"] = new Coords(750, 420);
-	ZoneCoords["my"]["Hand"] = new Coords(450, 500);
-	ZoneCoords["my"]["Monster2"] = new Coords(350, 360);
-	ZoneCoords["my"]["Spelltrap3"] = new Coords(450, 420);
+	this.Zones = {'my': {}, 'his': {} };
+	    
+	this.initZone("my", "Deck", 750, 500);
+	this.initZone("my", "GY", 750, 420);
+	this.initZone("my", "Hand", 450, 500);
 
-	ZoneCoords["his"]["Deck"] = new Coords(150, 20);
-	ZoneCoords["his"]["GY"] = new Coords(150, 180);
-	ZoneCoords["his"]["Hand"] = new Coords(450, 20);
-	ZoneCoords["his"]["Monster2"] = new Coords(550, 180);
-	ZoneCoords["his"]["Spelltrap3"] = new Coords(450, 90);
+	var i = 0; var my_monster_x_start = 100; var my_monster_y = 360;
+
+	for(i = 0; i < 5; i++)
+	{
+	    this.initZone("my", "Monster" + i, my_monster_x_start + i*this.zoneWidth, my_monster_y);
+	}
+
+	var my_spelltrap_x_start = 100; var my_spelltrap_y = 420;
+	for(i = 0; i < 5; i++)
+	{
+	    this.initZone("my", "Spelltrap" + i, my_spelltrap_x_start + i*this.zoneWidth, my_spelltrap_y);
+	}
 	
+	this.initZone("his", "Deck", 150, 20);
+	this.initZone("his", "GY", 150, 180);
+	this.initZone("his", "Hand", 450, 20);
+
+	var his_monster_x_start = 100; var his_monster_y = 180;
+	for(i = 0; i < 5; i++)
+	{
+	    this.initZone("his", "Monster" + i, his_monster_x_start + i*this.zoneWidth, his_monster_y);
+	}
+
+	var his_spelltrap_x_start = 100; var his_spelltrap_y = 90;
+	for(i = 0; i < 5; i++)
+	{
+	    this.initZone("his", "Spelltrap" + i, his_spelltrap_x_start + i*this.zoneWidth, his_spelltrap_y);
+	}
+
+	this.clickableZones = [];
+	this.clickedZoneName = "";
+
 	this.moveList = [];
 	this.cardsInHands = {'my': [], 'his': []};
 
@@ -139,6 +169,32 @@ var CardManager = {
 	};
 
     },
+
+
+
+    initZone : function(prefix, name, x, y, width = 70, height = 92)
+    {
+	console.log(prefix + " " + name);
+	this.Zones[prefix][name] = new Zone(prefix, this.perspectiveNo, name, x, y, width, height);
+	console.log(this.Zones[prefix][name].globalName);
+    },
+
+    getZone : function(zoneId)
+    {
+	var zone;
+	var splitzone = zoneId.split("_");
+	console.log(splitzone[1]);
+	if (splitzone[0] == this.perspectiveNo)
+	{
+	    zone = this.Zones["my"][splitzone[1]];
+	}
+	else
+	{
+	    zone = this.Zones["his"][splitzone[1]];
+	}
+	return zone;
+     },
+
     checkClickPhaseButton : function(x, y, clickOrUnclick)
     {
 	if (clickOrUnclick == 0)
@@ -177,6 +233,64 @@ var CardManager = {
 	}
 
     },
+    
+    enterChooseTargetCardMode(cardid_list)
+    {
+	this.clickMode = 2;
+	for (var i = 0; i < cardid_list.length; i++)
+	{
+		this.clickableCardIds.push(cardid_list);
+	}
+	$('#message').text("Choose a target.")
+    },
+    enterChooseZoneMode(zonename_list)
+    {
+	this.clickMode = 4;
+	this.clickableZones.splice(0, this.clickableZones.length)
+	for (var i = 0; i < zonename_list.length; i++)
+	{
+		console.log(zonename_list[i]);
+		zone = this.getZone(zonename_list[i]);
+		console.log(zone.globalName);
+		this.clickableZones.push(zone);
+	}
+	$('#message').text("Choose a free zone.")
+
+    },
+    checkClickZone : function(x, y, clickOrUnclick)
+    {
+	console.log("Running checkClickZone");
+	if (clickOrUnclick == 0) //a click
+	{
+	    this.clickedZoneName = "";
+	}
+	
+	for(var i = 0; i < this.clickableZones.length; i++)
+	{
+	    if (CoordsAreInsideObject(x,y, this.clickableZones[i]))
+	    {
+		if (clickOrUnclick == 0)
+		{
+		    this.clickedZoneName = this.clickableZones[i].globalName;
+		    break;
+	        }
+		else
+		{
+		    if (this.clickableZones[i].globalName == this.clickedZoneName)
+		    {
+			
+			    this.socket.emit("target_zone_chosen", {pnum: this.clientNo, duelid: this.duelid, zonename: this.clickedZoneName});
+		            this.clickedZoneName = "";
+			    this.clickableZones.splice(0, this.clickableZones.length);
+			    this.clickMode = 0;
+			    
+			    break;
+		    }
+		}
+	    }
+	}
+    },
+
     idInClickableCardIds(id)
     {
 	var res = false;
@@ -189,20 +303,6 @@ var CardManager = {
 	     }		       
 	}
         return res;
-    },
-    enterChooseTargetCardMode(zoneType, targetPlayerNo)
-    {
-	this.clickMode = 2;
-	for (var i = 0; i < this.cards.length; i++)
-	{
-	     curZoneData = this.cards[i].zoneId.split("_");
-	     curPlayerNo = curZoneData[0];
-	     curZoneType = curZoneData[1];
-	     if(curZoneType == zoneType && curPlayerNo == targetPlayerNo)
-	     {
-		this.clickableCardIds.push(this.cards[i].id);
-	     }
-	}
     },
 
     checkClickCard : function(x, y, clickOrUnclick)
@@ -253,6 +353,7 @@ var CardManager = {
 		            this.clickedCardId = "";
 			    this.clickableCardIds.splice(0, this.clickableCardsIds.length);
 			    this.clickMode = 0;
+			    
 			    break;
 			}
 		    }
@@ -287,6 +388,8 @@ var CardManager = {
 		    {
 			this.socket.emit("ask_run_action", {pnum: this.clientNo, duelid: this.duelid, cardid: this.cardButtons[i].parentcard.id, action_name: this.cardButtons[i].text });
 			this.deleteCardButtons();
+			$('#choice_buttons').html(""); //To remove the 'Pass' button in a Multiple Action Window
+
 		    }
 		    break;
 		}
@@ -391,7 +494,7 @@ var CardManager = {
 	}
 	else
 	{
-	     var mainTargetLocation = GetZoneCoords(zoneId);
+	     var mainTargetLocation = this.getZone(zoneId);
 	     this.cachedClickMode = this.clickMode;
 	     this.clickMode = -1;
 	     var whichHand;
@@ -497,7 +600,7 @@ var CardManager = {
 
     getCardInHandPos : function(whichHand, newNumCardsInHand, index)
     {
-	var handCenter = ZoneCoords[whichHand]["Hand"];
+	var handCenter = this.Zones[whichHand]["Hand"];
 	var centerIndex;
 	var centerCardXPos;
 

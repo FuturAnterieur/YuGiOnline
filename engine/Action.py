@@ -1,32 +1,47 @@
 import engine.HaltableStep
-from engine.Cards import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT
+from engine.defs import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT, CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_TRIGGER, STATE_ACTIVATE, STATE_RESOLVE
+
 
 class Action:
-    def init(self, name, card):
+    def init(self, name, card, parent_effect = None):
         self.name = name
         self.card = card
+        self.parent_effect = parent_effect
         if card is not None:
             self.player = card.owner
         self.was_negated = False
         
-    def checkbans(self, gamestate):
+    def check_for_bans(self, gamestate, effect_state = STATE_NOTINEFFECT):
         unbanned = True
-        for ban in gamestate.bannedactions:
-            if ban.matches(self):
+        for ban in gamestate.bans:
+            if ban.bans_action(self, gamestate, effect_state):
                 unbanned = False
                 break
 
         return unbanned
 
-    def run_if_triggers(self, gamestate):
-        gamestate.simultaneitycounter += 1
-        for event in gamestate.triggerevents:
-            if event.matches(self, gamestate):
-                event.execute(gamestate)
-        gamestate.simultaneitycounter -= 1
+    def check_for_immunities(self, card, effect_state):
+        compatible = True
+        for effect in card.effects:
+            if effect.blocks_action(self, effect_state):
+                compatible = False
+                break
+
+        return compatible
+
+    def check_for_bans_and_immunities(self, card, gamestate, effect_state = 0):
+        return self.check_for_bans(gamestate, effect_state) and self.check_for_immunities(card, effect_state) 
 
     def run(self, gamestate):  #I'll have to do the same for reqs
         self.__class__.run_func(self, gamestate)
+
+    def run_steps(self, gamestate, on_run_list_of_steps = None):
+        lot_to_run = self.list_of_steps if on_run_list_of_steps == None else on_run_list_of_steps
+
+        for i in range(len(lot_to_run) - 1, -1, -1):
+            gamestate.steps_to_do.appendleft(lot_to_run[i])
+
+        gamestate.run_steps()
 
 class RunResponseWindows(Action):
     def init(self, firstplayer, event_type):
@@ -70,50 +85,6 @@ def RunMAWForOtherPlayerCondition(gamestate, args):
 def RunIfSaysYes(gamestate, args, answer_arg_name):
     answer = args[answer_arg_name]
     return answer == "Yes"
-
-class ChainSendsToGraveyard(Action):
-    def run(self, gamestate):
-        self.args = {}
-        
-        gamestate.curspellspeed = 0
-
-        list_of_steps = []
-        cardcounter = 0
-
-        for cardinfo in gamestate.cards_chain_sends_to_graveyard:
-            card = cardinfo['card']
-            if card.location != 'Graveyard' and card.location != 'Banished':
-                #this check might be redundant but I'm keeping just in case a card gets sent to the graveyard
-                #AFTER its call to AddCardToChainSendsToGraveyard
-                self.args['card' + str(cardcounter)] = card
-                self.args['tozone' + str(cardcounter)] = card.owner.graveyard 
-            
-                zonenum = card.zone.zonenum
-                card.zonearray.pop_card(zonenum)
-                card.owner.graveyard.add_card(card)
-
-                list_of_steps.extend( [engine.HaltableStep.MoveCard(self, 'card' + str(cardcounter) , 'tozone' + str(cardcounter)),
-                                        engine.HaltableStep.EraseCard(self, 'card' + str(cardcounter))])
-
-                if (cardinfo['was_negated'] == False):
-                    list_of_steps.append(engine.HaltableStep.InitAndRunAction(self, CardLeavesFieldTriggers, 'card' + str(cardcounter)))
-                
-                
-                list_of_steps.append(engine.HaltableStep.InitAndRunAction(self, CardSentToGraveyardTriggers, 'card' + str(cardcounter)))
-                #does the sending of cards to the graveyard at the end of chain activate triggers?
-                #the wiki says these events are considered to be simultaneous to the last event in the chain.
-
-                #the wiki also says that if an activation was negated, its corresponding card will be sent to the graveyard if necessary
-                #at the end of the chain (as expected) but it will not count as having be sent there from the field.
-
-            cardcounter += 1
-
-        gamestate.cards_chain_sends_to_graveyard.clear()
-        
-        for i in range(len(list_of_steps) - 1, -1, -1):
-            gamestate.steps_to_do.appendleft(list_of_steps[i])
-
-        gamestate.run_steps()
 
 
 class RunTriggers(Action): #this function will always be ran at the end of a chain or sequence of events
@@ -172,10 +143,10 @@ class RunTriggers(Action): #this function will always be ran at the end of a cha
 
         
         #then run the chain
-
+        
         list_of_steps.extend([engine.HaltableStep.ClearChainableWhenTriggers(self), #they'll be refreshed by the response windows that need them
-                                engine.HaltableStep.ClearChainableIfTriggers(self), #we don't need those anymore 
-                                engine.HaltableStep.ClearSavedIfTriggers(self),  #and not those too
+                                engine.HaltableStep.ClearSavedIfTriggers(self),  #we don't need those anymore
+                                engine.HaltableStep.ClearChainableIfTriggers(self), #and not those too
                                 engine.HaltableStep.RunStepIfElseCondition(self, 
                                             engine.HaltableStep.LaunchTTR(self), 
                                             engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'turnplayer', 'for_what_event'), 
@@ -229,7 +200,7 @@ class DrawCard(Action):
 
     def default_run(self, gamestate):
         run_triggers_step = engine.HaltableStep.RunStepIfCondition(self, 
-                        engine.HaltableStep.RunAction(self, RunTriggers('Spell/Trap set')), 
+                        engine.HaltableStep.RunAction(self, RunTriggers('Card drawn')), 
                         RunTriggersCondition) if self.in_draw_phase == False else engine.HaltableStep.DoNothing(self)
 
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
@@ -242,7 +213,7 @@ class DrawCard(Action):
                         engine.HaltableStep.AppendToLRAIfRecording(self),
                         engine.HaltableStep.RunImmediateTriggers(self),
                         run_triggers_step,
-                        engine.HaltableStep.PopActionStack(self)] #add a run triggers conditional step here?
+                        engine.HaltableStep.PopActionStack(self)]
     
         for i in range(len(list_of_steps) - 1, -1, -1):
             gamestate.steps_to_do.appendleft(list_of_steps[i])
@@ -262,9 +233,48 @@ def run_for_trigger_action(action, gamestate):
         
     gamestate.run_steps()
 
-class CardLeavesFieldTriggers(Action):
-    def init(self, card):
-        super(CardLeavesFieldTriggers, self).init("Card Leaves Field", card)
+def run_for_trigger_pre_action(action, gamestate):
+    list_of_steps = [engine.HaltableStep.RunImmediateTriggers(action)]
+    
+    for i in range(len(list_of_steps) - 1, -1, -1):
+        gamestate.steps_to_do.appendleft(list_of_steps[i])
+        
+    gamestate.run_steps()
+
+
+class PreCardLeavesZoneTriggers(Action):
+    def init(self, card, zone, parentAction):
+        super().init("PreCardLeaves" + zone.type, card)
+        self.zone = zone
+        self.parentAction = parentAction
+        self.args = self.parentAction.args
+
+    def run(self, gamestate):
+        run_for_trigger_pre_action(self, gamestate)
+
+class PreCardSentToZoneTriggers(Action):
+    def init(self, card, zone, parentAction):
+        super().init("PreCardSentTo" + zone.type, card)
+        self.zone = zone
+        self.parentAction = parentAction
+        self.args = self.parentAction.args
+
+    def run(self, gamestate):
+        run_for_trigger_pre_action(self, gamestate)
+
+class ApplyBansForChangeCardZone(Action):
+    def init(self, card, parentAction):
+        super().init("Bans application for CCZ", card)
+        self.parentAction = parentAction
+        self.args = self.parentAction.args
+
+    def run(self, gamestate):
+        run_for_trigger_pre_action(self, gamestate)
+
+class CardLeavesZoneTriggers(Action):
+    def init(self, card, zone):
+        super().init("Card Leaves " + zone.type, card)
+        self.zone = zone
         self.args = {}
 
     def default_run(self, gamestate):
@@ -278,43 +288,82 @@ class CardLeavesFieldTriggers(Action):
 
     run_func = default_run
 
-class CardSentToGraveyardTriggers(Action):
-    def init(self, card):
-        super(CardSentToGraveyardTriggers, self).init("Card sent to Graveyard", card)
+class CardSentToZoneTriggers(Action):
+    def init(self, card, zone):
+        super().init("Card sent to " + zone.type, card)
         self.args = {}
+        self.zone = zone
 
     def default_run(self, gamestate):
         run_for_trigger_action(self, gamestate)
 
     run_func = default_run
         
-class DestroyCard(Action):
-    
-    def init(self, card, is_contained):
-        super(DestroyCard, self).init("Destroy Card", card)
-        self.args = {'destroyedcard' : card, 'fromzone' : card.zone, 'tozone' : card.owner.graveyard, 'this_action' : self}
-        self.is_contained = is_contained
+class  TurnOffPassiveEffects(Action):
+    def init(self, card, zone):
+        super().init('Utility effect deactivation for leaving ' + zone.type, card)
+        self.args = {}
+        self.zone = zone
 
     def default_run(self, gamestate):
-        print(self.card.name, "destroyed")
+        run_for_trigger_pre_action(self, gamestate)
+
+    run_func = default_run
+
+
+
+#attempt to merge Destroy, Banish, Discard and Return To Hand in a single, at-run-time modifiable action
+
+def EraseIfGYOrBanished(gamestate, args, tozone_arg_name):
+    tozone = args[tozone_arg_name]
+    return tozone.type == "Graveyard" or tozone.type == "Banished"
+
+
+class ChangeCardZone(Action):
+    
+    def init(self, name, card, is_contained, with_leave_zone_trigger = True, parent_effect = None):
+        super().init(name, card, parent_effect)
         
-        if (self.card in gamestate.monsters_to_be_destroyed_by_battle):
-            gamestate.monsters_to_be_destroyed_by_battle.remove(self.card)
+        tozone = ""
+        if name == CCZBANISH:
+            tozone = card.owner.banished
+        elif name == CCZRETURNTOHAND:
+            tozone = card.owner.hand
+        else:
+            tozone = card.owner.graveyard
 
+        self.intended_action = name
+        self.intended_tozone = tozone    
+        self.args = {'card' : card, 'fromzone' : card.zone, 'tozone' : tozone, 'this_action' : self}
+        self.is_contained = is_contained
+        self.with_leave_zone_trigger = with_leave_zone_trigger
+        
+        
+
+    def default_run(self, gamestate):
+        
         clear_lra_step = engine.HaltableStep.DoNothing(self) if self.is_contained else engine.HaltableStep.ClearLRAIfRecording(self)
-
+        lzt_step = engine.HaltableStep.InitAndRunAction(self, CardLeavesZoneTriggers, 'card', 'fromzone') if self.with_leave_zone_trigger else engine.HaltableStep.DoNothing(self)
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                             clear_lra_step,
-                        engine.HaltableStep.MoveCard(self, 'destroyedcard', 'tozone'),
-                            engine.HaltableStep.EraseCard(self, 'destroyedcard'),
-                            engine.HaltableStep.DestroyCardServer(self, 'destroyedcard'),
-                            engine.HaltableStep.InitAndRunAction(self, CardLeavesFieldTriggers, 'destroyedcard'),
-                            engine.HaltableStep.InitAndRunAction(self, CardSentToGraveyardTriggers, 'destroyedcard'),
+                            engine.HaltableStep.InitAndRunAction(self, PreCardLeavesZoneTriggers, 'card', 'fromzone', 'this_action'), 
+                            #This is for 'banish it when it leaves the field'-type triggers
+                            engine.HaltableStep.InitAndRunAction(self, PreCardSentToZoneTriggers, 'card', 'tozone', 'this_action'), 
+                            engine.HaltableStep.InitAndRunAction(self, TurnOffPassiveEffects, 'card', 'fromzone'),
+                             engine.HaltableStep.InitAndRunAction(self, ApplyBansForChangeCardZone, 'card', 'this_action'),
+                            #for deactivating cards when they leave the field, mostly
+                            engine.HaltableStep.MoveCard(self, 'card', 'tozone'),
+                            engine.HaltableStep.RunStepIfCondition(self, 
+                                    engine.HaltableStep.EraseCard(self, 'card'),
+                                    EraseIfGYOrBanished, 'tozone'),
+                            engine.HaltableStep.ChangeCardZoneServer(self, 'card', 'tozone'),
+                            lzt_step,
+                            engine.HaltableStep.InitAndRunAction(self, CardSentToZoneTriggers, 'card', 'tozone'),
                             engine.HaltableStep.ProcessIfTriggers(self),
                             engine.HaltableStep.AppendToLRAIfRecording(self),
                             engine.HaltableStep.RunImmediateTriggers(self),
                             engine.HaltableStep.RunStepIfCondition(self, 
-                                engine.HaltableStep.RunAction(self, RunTriggers('Card destroyed')), RunTriggersCondition),
+                                engine.HaltableStep.RunAction(self, RunTriggers(self.name)), RunTriggersCondition),
                             engine.HaltableStep.PopActionStack(self),
                             engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunMAWsAtEnd()), ActionStackEmpty)]
         
@@ -327,6 +376,43 @@ class DestroyCard(Action):
 
     run_func = default_run
 
+class ChainSendsToGraveyard(Action):
+    def run(self, gamestate):
+        self.args = {'this_action' : self}
+        
+        gamestate.curspellspeed = 0
+
+        list_of_steps = []
+        cardcounter = 0
+
+        self.args = {'action' : CCZDESTROY, 'is_contained' : True}
+
+        for cardinfo in gamestate.cards_chain_sends_to_graveyard:
+            card = cardinfo['card']
+            if card.location != 'Graveyard' and card.location != 'Banished':
+                self.args['card' + str(cardcounter)] = card
+                self.args['wlft' + str(cardcounter)] = not cardinfo['was_negated']
+                #this check might be redundant but I'm keeping just in case a card gets sent to the graveyard
+                #AFTER its call to AddCardToChainSendsToGraveyard
+                
+                list_of_steps.append(engine.HaltableStep.InitAndRunAction(self, ChangeCardZone, 'action', 
+                                                                            'card' + str(cardcounter), 'is_contained', 'wlft' + str(cardcounter)))
+
+                #does the sending of cards to the graveyard at the end of chain activate triggers?
+                #the wiki says these events are considered to be simultaneous to the last event in the chain.
+
+                #the wiki also says that if an activation was negated, its corresponding card will be sent to the graveyard if necessary
+                #at the end of the chain (as expected) but it will not count as having be sent there from the field.
+
+            cardcounter += 1
+
+        gamestate.cards_chain_sends_to_graveyard.clear()
+
+        
+        for i in range(len(list_of_steps) - 1, -1, -1):
+            gamestate.steps_to_do.appendleft(list_of_steps[i])
+
+        gamestate.run_steps()
 
 class FlipMonsterFaceUp(Action):
     def init(self, card):
@@ -366,15 +452,17 @@ class TributeMonsters(Action):
         super(TributeMonsters, self).init("Tribute Monsters", None)
         self.player = player
         self.numtributesrequired = numtributesrequired
-        self.args = {'deciding_player' : self.player, 'target_player' : self.player, 'destroy_is_contained' : True, 'this_action' : self}
+        self.args = {'deciding_player' : self.player, 'target_player' : self.player, 'destroy_is_contained' : True, 'destroy_type' : CCZDESTROY, 'this_action' : self}
         
     def reqs(self, gamestate):
-        if self.checkbans(gamestate) == False:
+        if self.check_for_bans(gamestate) == False:
             return False
 
         if(len(self.player.monsterzones.occupiedzonenums) < self.numtributesrequired):
             return False
         else:
+            self.args['possible_tributes'] = self.player.monsters_on_field
+
             return True
     
     def default_run(self, gamestate):
@@ -382,8 +470,8 @@ class TributeMonsters(Action):
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self), engine.HaltableStep.ClearLRAIfRecording(self)]
         
         #'Monster' is not an arg from the args dict but a parameter indicating to choose among monster zones
-        list_of_steps_for_one_tribute = [engine.HaltableStep.ChooseOccupiedZone(self, 'Monster', 'deciding_player', 'target_player', 'chosen_monster'),
-                                         engine.HaltableStep.InitAndRunAction(self, DestroyCard, 'chosenmonster', 'destroy_is_contained')]
+        list_of_steps_for_one_tribute = [engine.HaltableStep.ChooseOccupiedZone(self,'deciding_player', 'possible_tributes', 'chosen_monster'),
+                                         engine.HaltableStep.InitAndRunAction(self, ChangeCardZone, 'destroy_type', 'chosen_monster', 'destroy_is_contained')]
 
         for i in range(self.numtributesrequired):
             list_of_steps.extend(list_of_steps_for_one_tribute)
@@ -416,7 +504,7 @@ def RunOtherPlayerWindowCondition(gamestate, args, answer_arg_name):
 class NormalSummonMonster(SummonMonster):
     
     def init(self, card):
-        super(NormalSummonMonster, self).init("Normal Summon Monster", card)
+        super().init("Normal Summon Monster", card)
         self.TributeAction = TributeMonsters()
         self.TributeAction.init(self.card.numtributesrequired, self.card.owner)
         self.args = { 'this_action' : self, 'summonedmonster' : card, 'actionplayer' : card.owner, 
@@ -425,7 +513,7 @@ class NormalSummonMonster(SummonMonster):
     def reqs(self, gamestate):
         player = self.card.owner
 
-        if self.checkbans(gamestate) == False:
+        if self.check_for_bans(gamestate) == False:
             return False
         
         if player != gamestate.turnplayer or (gamestate.curphase != 'main_phase_1' and gamestate.curphase != 'main_phase_2'):
@@ -463,6 +551,7 @@ class NormalSummonMonster(SummonMonster):
         #TODO : steps (and javascript) for the selection of a free zone
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                         engine.HaltableStep.ClearLRAIfRecording(self),
+                        engine.HaltableStep.ChooseFreeZone(self, 'actionplayer', 'Monster'),
                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, self.TributeAction), 
                                                                                     RunTributeCondition, 'summonedmonster'),
                         engine.HaltableStep.AskQuestion(self, 'actionplayer', 'choose_position', 'ATK_DEF', 'ATK_or_DEF_answer'),  
@@ -489,7 +578,7 @@ class NormalSummonMonster(SummonMonster):
 
 class MonsterWouldBeSummonedTriggers(Action):
     def init(self, card):
-        super(MonsterWouldBeSummonedTriggers, self).init("Monster would be summoned", card)
+        super().init("Monster would be summoned", card)
         self.args = {}
 
     def run(self, gamestate):
@@ -497,7 +586,7 @@ class MonsterWouldBeSummonedTriggers(Action):
 
 class NormalSummonMonsterCore(Action):
     def init(self, card, position, parentNormalSummonAction):
-        super(NormalSummonMonsterCore, self).init("Normal Summon Monster", card)
+        super().init("Normal Summon Monster", card)
         self.args = {'summonedmonster': card, 'position' : position, 'chosenzone' : card.owner.monsterzones.listofzones[2], 
                 'action_player' : card.owner, 'other_player' : card.owner.other}
         self.parentNormalSummonAction = parentNormalSummonAction
@@ -527,156 +616,56 @@ class NormalSummonMonsterCore(Action):
         gamestate.run_steps()
 
 
-class SetSpellTrap(Action):
-    
-    def init(self, card):
-        super(SetSpellTrap, self).init("Set Spell/Trap card", card)
-        player = card.owner
-        self.args = {'set_card' : card, 'chosen_zone' : player.spelltrapzones.listofzones[3], 'player' : player}
-
-    def reqs(self, gamestate):
-        if self.checkbans(gamestate) == False:
-            return False
-
-        if self.player != gamestate.turnplayer or (gamestate.curphase != 'main_phase_1' and gamestate.curphase != 'main_phase_2'):
-            return False
-
-        if len(gamestate.action_stack) > 0:
-            return False
-
-        if self.card.location != "Hand":
-            return False
-
-        return True
-
-    def default_run(self, gamestate):
-        list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
-                        engine.HaltableStep.ClearLRAIfRecording(self),
-                        engine.HaltableStep.SetSpellTrapServer(self, 'set_card'),
-                        engine.HaltableStep.MoveCard(self, 'set_card', 'chosen_zone'),
-                        engine.HaltableStep.ChangeCardVisibility(self, ['player'], 'set_card', "0"),
-                        engine.HaltableStep.ProcessIfTriggers(self),
-                        engine.HaltableStep.AppendToLRAIfRecording(self),
-                        engine.HaltableStep.RunImmediateTriggers(self),
-                        engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunTriggers('Spell/Trap set')), 
-                            RunTriggersCondition),
-                        engine.HaltableStep.PopActionStack(self),
-                        engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunMAWsAtEnd()), ActionStackEmpty)]
-
-        for i in range(len(list_of_steps) - 1, -1, -1):
-            gamestate.steps_to_do.appendleft(list_of_steps[i])
-
-        gamestate.run_steps()
-                        
-
-    run_func = default_run
-
-
-
-
-def basic_reqs_for_trap(action, gamestate):
-    if gamestate.curspellspeed > action.effect.spellspeed:
-        return False
-
-    if action.card.location != "Field":
-        return False
-
-    if action.card.wassetthisturn == True:
-        return False
-
-    return True
-
-
-def CheckIfCardOnField(gamestate, args, card_arg_name):
-    card = args[card_arg_name]
-    return card.location == "Field"
-
-class ActivateNormalTrap(Action):
-    
-    def init(self, card, effect):
-        super(ActivateNormalTrap, self).init("Activate Normal Trap", card)
-        self.effect = effect
-        self.args = {'this_action' : self, 'card' : card, 'effect' : effect, 'actionplayer' : card.owner, 'otherplayer' : card.owner.other, 'action1' : 'Normal trap activated'}
-
-    def reqs(self, gamestate):
-        if self.checkbans(gamestate) == False:
-            return False
-        
-        if basic_reqs_for_trap(self, gamestate) == False:
-            return False
-
-        if self.effect.reqs(gamestate) == False:
-            return False
-
-        if self.card.face_up != FACEDOWN: #or I could put a 'once per chain' constraint
-            return False
-
-        return True
-    
-    def default_run(self, gamestate):
-        
-        list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
-                        engine.HaltableStep.SetBuildingChain(self),
-                         engine.HaltableStep.ActivateNormalTrapBeforeActivate(self, 'card', 'effect'),
-                         engine.HaltableStep.ChangeCardVisibility(self, ['otherplayer', 'actionplayer'], 'card', "1"),
-                         engine.HaltableStep.DisableLRARecording(self),
-                         engine.HaltableStep.CallEffectActivate(self, 'effect'),
-                         engine.HaltableStep.EnableLRARecording(self),
-                         engine.HaltableStep.AppendToChainLinks(self),
-                         engine.HaltableStep.RunStepIfElseCondition(self, engine.HaltableStep.LaunchTTR(self), 
-                             engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'otherplayer', 'action1'), TTRNonEmpty),  
-                         engine.HaltableStep.UnsetBuildingChain(self),
-                         engine.HaltableStep.PopChainLinks(self),
-                         engine.HaltableStep.RunStepIfCondition(self, 
-                                        engine.HaltableStep.InitAndRunAction(self, ResolveNormalTrapCore, 'card', 'effect'),
-                                        CheckIfNotNegated, 'this_action'),
-                         engine.HaltableStep.RunStepIfCondition(self,
-                                        engine.HaltableStep.AddCardToChainSendsToGraveyard(self, 'card'),
-                                        CheckIfCardOnField, 'card'),
-                         engine.HaltableStep.RunStepIfCondition(self, 
-                                                engine.HaltableStep.RunAction(self, ChainSendsToGraveyard()), EndOfChainCondition),
-                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunTriggers('Chain resolved')), RunTriggersCondition),
-                         engine.HaltableStep.PopActionStack(self),
-                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunMAWsAtEnd()), ActionStackEmpty)]
-                         
-            
-        #To do : delay the sending of the card to the graveyard only at the end of the chain
-        #so here, register the card as being 'to be sent to the grave'
-        #and send it to the grave in a special step at the end of the chain.
-        for i in range(len(list_of_steps) - 1, -1, -1):
-            gamestate.steps_to_do.appendleft(list_of_steps[i])
-
-        gamestate.run_steps()
-        
-
-
-    run_func = default_run
-
-class ResolveNormalTrapCore(Action):
-    def init(self, card, effect):
-        super(ResolveNormalTrapCore, self).init("Activate Normal Trap", card)
-        self.effect = effect
-        self.args = {'effect' : effect}
-
-    
-    def run(self, gamestate):
-        list_of_steps = [engine.HaltableStep.ClearLRAIfRecording(self),
-                         engine.HaltableStep.CallEffectResolve(self, 'effect')] #the Effect Resolve will call its own trigger-setting steps
-                         #engine.HaltableStep.ProcessIfTriggers(self),
-                         #engine.HaltableStep.AppendToLRAIfRecording(self), #for the actual action of resolving the card
-                         #engine.HaltableStep.RunImmediateTriggers(self)]
-
-        for i in range(len(list_of_steps) - 1, -1, -1):
-            gamestate.steps_to_do.appendleft(list_of_steps[i])
-
-        gamestate.run_steps()
 
 class DeclareAttack(Action):
 
     def init(self, card):
         super(DeclareAttack, self).init("Declare Attack", card)
-        self.args = {'this_action' : self, 'player' : self.card.owner, 'target_player' : self.card.owner.other, 'attacking_monster' : card, 'target_arg_name' : 'target'}
+        self.args = {'odaa' : self, 'player' : self.card.owner, 'target_player' : self.card.owner.other, 
+                        'attacking_monster' : card, 'target_arg_name' : 'target'}
 
+        #odaa stands for original declare attack action
+    def evaluate_potential_target_monsters(self, gamestate):
+       
+        list_of_possible_target_monsters = []
+        for monster in self.args['target_player'].monsters_on_field:
+            compatible = True
+            dummy_attack = DeclareAttack(self.card)
+            dummy_attack['target'] = monster
+
+            unbanned = dummy_attack.check_for_bans(gamestate)
+            if unbanned == False:
+                compatible = False
+
+            else:
+                not_blocked = dummy_attack.check_for_immunities(monster)
+                if not_blocked == False:
+                    compatible = False
+
+            if compatible:
+                list_of_possible_target_monsters.append(monster)
+
+        return list_of_possible_target_monsters
+
+    def evaluate_if_target_can_still_be_attacked(self, gamestate):
+        unbanned = self.check_for_bans(gamestate)
+        
+        if self.args['target'] == 'direct_attack':
+            return unbanned
+        else:
+            if unbanned == False:
+                return False
+
+            compatible = self.check_for_immunities(self.args['target'])
+            
+            return compatible
+    
+    def is_direct_attack_possible(self, gamestate):
+        sample_direct_attack = DeclareAttack()
+        sample_direct_attack.init(self.card)
+        sample_direct_attack.args['target'] = 'direct_attack'
+
+        return (self.card.can_attack_directly or len(self.args['target_player'].monsters_on_field) == 0) and sample_direct_attack.check_for_bans(gamestate)
 
     def reqs(self, gamestate):
         if len(gamestate.action_stack) > 0:
@@ -694,6 +683,18 @@ class DeclareAttack(Action):
         if self.card.attacks_declared_this_turn >= self.card.max_attacks_per_turn:
             return False
 
+        if self.check_for_bans(gamestate) == False:
+            return False
+        
+        self.args['possible_targets'] = self.evaluate_potential_target_monsters(gamestate)
+        
+        is_direct_attack_possible = self.is_direct_attack_possible(gamestate)
+
+        if not is_direct_attack_possible and len(self.args['possible_targets']) == 0:
+            return False
+        
+        self.card_could_attack_directly = is_direct_attack_possible
+       
         return True
 
     def default_run(self, gamestate):
@@ -704,9 +705,9 @@ class DeclareAttack(Action):
 
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                         engine.HaltableStep.ClearLRAIfRecording(self),
-                        engine.HaltableStep.InitAndRunAction(self, SelectAttackTarget, 'attacking_monster', 'this_action', 'target_arg_name'),
-                        engine.HaltableStep.InitAndRunAction(self, AttackDeclarationTriggers, 'this_action'),
-                        engine.HaltableStep.InitAndRunAction(self, AttackTargetingTriggers, 'this_action'),
+                        engine.HaltableStep.InitAndRunAction(self, SelectAttackTarget, 'attacking_monster', 'odaa', 'target_arg_name'),
+                        engine.HaltableStep.InitAndRunAction(self, AttackDeclarationTriggers, 'odaa'),
+                        engine.HaltableStep.InitAndRunAction(self, AttackTargetingTriggers, 'odaa'),
                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunTriggers('Attack declared')), 
                             RunTriggersCondition),
                         engine.HaltableStep.PopActionStack(self),
@@ -725,14 +726,14 @@ def DirectAttackChoice(gamestate, args, da_arg_name):
 
 class SelectAttackTarget(Action):
     def init(self, card, parent_declare_attack_action, target_arg_name):
-        super(SelectAttackTarget, self).init("Declare Attack", card)
-        self.pdaa = parent_declare_attack_action
+        super().init("Select attack target", card)
+        self.pdaa = parent_declare_attack_action #could replace that with gamestate.attack_declared_action
         self.taa = target_arg_name
         self.args = {}
 
     def run(self, gamestate):
         list_of_steps = []
-        if len(self.card.owner.other.monsterzones.occupiedzonenums) == 0:
+        if len(self.pdaa.args['possible_targets']) == 0:
             self.pdaa.args[self.taa] = 'direct_attack'
 
         else:
@@ -740,7 +741,7 @@ class SelectAttackTarget(Action):
                 list_of_steps.extend([engine.HaltableStep.AskQuestion(self.pdaa, 'player', "want_attack_directly", 'Yes_No', 'direct_attack_answer'),
                                     engine.HaltableStep.RunStepIfElseCondition(self.pdaa, 
                                         engine.HaltableStep.SetArgToValue(self.pdaa, self.taa, 'direct_attack'),
-                                        engine.HaltableStep.ChooseOccupiedZone(self.pdaa, 'Monster', 'player', 'target_player', self.taa),
+                                        engine.HaltableStep.ChooseOccupiedZone(self.pdaa, 'player', 'possible_targets', self.taa),
                                         DirectAttackChoice, 'direct_attack_answer')])
 
             else:
@@ -772,7 +773,19 @@ class AttackTargetingTriggers(Action):
         run_for_trigger_action(self, gamestate)
 
 def AttackTargetingReplayCondition(gamestate, args):
-    return gamestate.replay_was_triggered
+    ret = False
+    
+    is_direct_attack_possible_now = gamestate.attack_declared_action.card.is_direct_attack_possible(gamestate)
+    
+    if gamestate.replay_was_triggered:
+        ret = True
+    else:
+        if gamestate.attack_declared_action.card_could_attack_directly == False and is_direct_attack_possible_now == True:
+            ret = True #checks if the monster can suddenly attack directly 
+        else:
+            if gamestate.attack_declared_action.evaluate_if_target_can_still_be_attacked(gamestate) == False:
+                ret = True
+    return ret
 
 
 def RACWasNotCancel(gamestate, args, answer_arg_name):
@@ -784,17 +797,29 @@ class AttackTargetingReplay(Action):
         super(AttackTargetingReplay, self).init("Attack replay", parent_declare_attack_action.card)
         self.odaa = original_declare_attack_action
         self.args = self.odaa.args
-        self.args['this_action'] = self
+        self.args['ra'] = self
 
-    
+        #ra stands for replay action
     def default_run(self, gamestate):
         gamestate.replay_was_triggered = False
+
+        is_attack_still_possible = True
+        self.odaa.args['possible_targets'] = self.odaa.evaluate_potential_target_monsters()
+        is_direct_attack_possible_now = self.odaa.is_direct_attack_possible()
+        
+        if not is_direct_attack_possible_now and len(self.odaa.args['possible_targets']) == 0:
+            is_attack_still_possible = False
+
+        self.odaa.card_could_attack_directly = is_direct_attack_possible_now
+
+        choices = "CancelAttack_SelectTarget" if is_attack_still_possible else "CancelAttack"
+
         gamestate.immediate_triggers.append(gamestate.AttackReplayTrigger)
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                         engine.HaltableStep.ClearLRAIfRecording(self),
-                        engine.HaltableStep.AskQuestion(self, 'player', "replay_action_choice", 'CancelAttack_SelectTarget', 'rac_answer'),
+                        engine.HaltableStep.AskQuestion(self, 'player', "replay_action_choice", choices, 'rac_answer'),
                         engine.HaltableStep.RunStepsIfElseCondition(self, 
-                            engine.HaltableStep.InitAndRunAction(self, ReselectTargetCore, 'this_action'),
+                            engine.HaltableStep.InitAndRunAction(self, ReselectTargetCore, 'ra'),
                             engine.HaltableStep.CancelAttackInGamestate(self),
                             RACWasNotCancel, 'rac_answer'),
                         engine.HaltableStep.PopActionStack(self),
@@ -811,15 +836,16 @@ class AttackTargetingReplay(Action):
 
 class ReselectTargetCore(Action):
     def init(self, parent_replay_action):
-        super(ReselectTargetCore, self).init("Attack replay", parent_declare_attack_action.card)
+        super().init("Attack replay", parent_declare_attack_action.card)
         self.pra = parent_replay_action
-
+        self.args = self.pra.args
+        
     def run(self, gamestate):
         #a replay triggers for 'A monster is targeted by an attack' but not for 'a monster declares an attack'
 
-        gamestate.attack_declared_action = self.pra
-        list_of_steps = [engine.HaltableStep.InitAndRunAction(self, SelectAttackTarget, 'attacking_monster', 'this_action', 'target_arg_name'),
-                        engine.HaltableStep.InitAndRunAction(self, AttackTargetingTriggers, 'this_action'),
+        
+        list_of_steps = [engine.HaltableStep.InitAndRunAction(self, SelectAttackTarget, 'attacking_monster', 'odaa', 'target_arg_name'),
+                        engine.HaltableStep.InitAndRunAction(self, AttackTargetingTriggers, 'odaa'),
                         engine.HaltableStep.RunStepIfCondition(self, 
                             engine.HaltableStep.RunAction(self, RunTriggers()), 
                             RunTriggersCondition)]
@@ -860,6 +886,7 @@ class BattleStepBranchOut(Action):
 
         if gamestate.attack_declared == True:
             self.args['ad_action'] = gamestate.attack_declared_action
+            
             list_of_steps.append(engine.HaltableStep.RunStepIfElseCondition(self, 
                             engine.HaltableStep.InitAndRunAction(self, AttackTargetingReplay, 'ad_action'),
                             engine.HaltableStep.InitAndRunAction(self, LaunchDamageStep, 'ad_action'), 
@@ -990,11 +1017,12 @@ class DuringDamageCalculation(Action):
         list_of_steps = [engine.HaltableStep.RunImmediateTriggers(self),
                         engine.HaltableStep.ProcessIfTriggers(self),
                         engine.HaltableStep.AppendToLRAIfRecording(self),
+                        engine.HaltableStep.RunAction(self, RunTriggers('during damage calculation', False)),
                         engine.HaltableStep.PerformDamageCalculation(self, 'loserplayer', 'LPamount'),
                         engine.HaltableStep.ChangeLifePointsAnimation(self, 'loserplayer', 'LPamount'),
                         engine.HaltableStep.StopDuelIfVictoryCondition(self),
                         engine.HaltableStep.InitAndRunAction(self, MonstersMarkedTriggersForAll, 'this_action'),
-                        engine.HaltableStep.RunAction(self, RunTriggers('during_damage_calculation', False)),
+                        #engine.HaltableStep.RunAction(self, RunTriggers('monsters marked triggers', False)),
                         engine.HaltableStep.ClearLRAIfRecording(self)]
                
         for i in range(len(list_of_steps) - 1, -1, -1):
@@ -1070,12 +1098,12 @@ class BattleSendsMonstersToGraveyard(Action):
 
 class DestroyMonsterByBattle(Action):
     def init(self, card):
-        super(DestroyMonsterByBattle, self).init(card)
-        self.args = {'monster' : card, 'DestroyActionIsContained' : True}
+        super().init('Destroy monster by battle', card)
+        self.args = {'monster' : card, 'destroy_type' : CCZDESTROY, 'DestroyActionIsContained' : True}
     
     def run(self, gamestate):
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
-                        engine.HaltableStep.InitAndRunAction(self, DestroyCard, 'monster', 'DestroyActionIsContained'),
+                        engine.HaltableStep.InitAndRunAction(self, ChangeCardZone, 'destroy_type', 'monster', 'DestroyActionIsContained'),
                         engine.HaltableStep.AppendToLRAIfRecording(self),
                         engine.HaltableStep.ProcessIfTriggers(self),
                         engine.HaltableStep.RunImmediateTriggers(self),
@@ -1106,6 +1134,7 @@ class LaunchEndStep(Action):
         gamestate.current_battle_phase_step = 'end_step'
         list_of_steps = [engine.HaltableStep.SetMultipleActionWindow(gamestate.turnplayer, 'battle_phase_end_step'),
                          engine.HaltableStep.SetMultipleActionWindow(gamestate.otherplayer, 'battle_phase_end_step'),
+                         engine.HaltableStep.SetAttackDeclaredActionToNone(self),
                          engine.HaltableStep.LetTurnPlayerChooseNextPhase()]
         
         for i in range(len(list_of_steps) - 1, -1, -1):

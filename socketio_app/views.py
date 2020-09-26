@@ -193,12 +193,15 @@ def target_card_chosen(sid, message):
     theplayer = duel.player_set.get(player_number = int(message['pnum']))
 
     if (theplayer.sid == sid):
-        ccan = gameStates[duel.id].answer_arg_name
-        card = gameStates[duel.id].cardsById[int(message['cardid'])]
-        gameStates[duel.id].action_waiting_for_a_card_choice.args[ccan] = card
+        gameStates[duel.id].process_card_choice(int(message['cardid']))
 
-        gameStates[duel.id].keep_running_steps = True
-        gameStates[duel.id].run_steps()
+@sio.event
+def target_zone_chosen(sid, message):
+    duel = get_object_or_404(Duel, pk=int(message['duelid']))
+    theplayer = duel.player_set.get(player_number = int(message['pnum']))
+
+    if (theplayer.sid == sid):
+        gameStates[duel.id].process_zone_choice(message['zonename'])
 
 @sio.event
 def send_answer(sid, message):

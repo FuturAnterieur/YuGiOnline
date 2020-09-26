@@ -1,9 +1,10 @@
 class Zone:
-    def __init__(self, name, cardlimit, owner, zonenum = 0):
+    def __init__(self, name, cardlimit, owner, ztype, zonenum = 0):
         self.name = name
         self.cardlimit = cardlimit
         self.owner = owner
         self.cards = []
+        self.type = ztype
         self.zonenum = zonenum
 
     def add_card(self, card):
@@ -32,7 +33,7 @@ class Zone:
 
 class Graveyard(Zone):
     def __init__(self, name, owner):
-        super(Graveyard, self).__init__(name, 65, owner)
+        super(Graveyard, self).__init__(name, 65, owner, "Graveyard")
 
     def add_card(self, card):
         super(Graveyard, self).add_card(card)
@@ -41,9 +42,18 @@ class Graveyard(Zone):
         #card.on_send_to_graveyard()
         #card.on_destroy() just as we can't call card.on_discard() here either
 
+class Banished(Zone):
+    def __init__(self, name, owner):
+        super().__init__(name, 65, owner, "Banished")
+
+    def add_card(self, card, face_up):
+        super().add_card(card)
+        card.location = "Banished"
+        card.face_up = face_up
+
 class FieldZone(Zone):
     def __init__(self, name, owner, zonenum):
-        super(FieldZone, self).__init__(name, 1, owner, zonenum)
+        super(FieldZone, self).__init__(name, 1, owner,  "Field", zonenum)
 
     def add_card(self, card):
         super(FieldZone, self).add_card(card)
@@ -58,10 +68,11 @@ class FieldZone(Zone):
             return None
 
 class FieldZoneArray:
-    def __init__(self, nameprefix, owner, numzones):
+    def __init__(self, nameprefix, owner, numzones, cardlist):
         self.listofzones = [FieldZone(nameprefix + str(x), owner, x) for x in range(numzones)]
         self.allzonenums = set([x for x in range(numzones)])
         self.occupiedzonenums = set()
+        self.cardlist = cardlist
 
     def get_card(self, zonenum):
         if zonenum in self.occupiedzonenums:
@@ -73,9 +84,11 @@ class FieldZoneArray:
         card.zonearray = self
         self.listofzones[zonenum].add_card(card)
         self.occupiedzonenums.add(zonenum)
+        self.cardlist.append(card)
 
     def pop_card(self, zonenum):
         card = self.listofzones[zonenum].pop_card()
+        self.cardlist.remove(card)
         card.zonearray = None
         self.occupiedzonenums.discard(zonenum)
         return card
@@ -108,7 +121,8 @@ class FieldZoneArray:
 
 class Hand(Zone):
     def __init__(self, name, owner):
-        super(Hand, self).__init__(name, 65, owner)
+        super(Hand, self).__init__(name, 65, owner, "Hand")
+        
 
     def add_card(self, card):
         super(Hand, self).add_card(card)

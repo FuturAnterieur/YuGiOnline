@@ -2,7 +2,10 @@ import engine.Action
 import engine.Cards
 import engine.Effect
 import engine.HaltableStep
+import engine.Player
 from engine.TriggerEvent import TriggerEvent
+
+import copy
 
 from collections import deque
 
@@ -17,26 +20,32 @@ class Phase:
 
 
 class GameState:
-    def __init__(self, firstplayer, otherplayer, sio, duel_id):
+    def __init__(self, yugi_deck, kaiba_deck, sio, duel_id):
         self.sio = sio
         self.duel_id = duel_id
-        firstplayer.other = otherplayer
-        otherplayer.other = firstplayer
-        self.firstplayer = firstplayer
-        self.secondplayer = otherplayer
 
-        self.turnplayer = firstplayer
-        self.otherplayer = firstplayer.other
-        firstplayer.gamestate = self
-        otherplayer.gamestate = self
-
+        self.zonesByName = {}
         self.cardsById = {}
 
-        for card in self.turnplayer.deckzone.cards:
+        self.yugi = engine.Player.Player(0, self)
+        self.kaiba = engine.Player.Player(1, self)
+
+
+        self.yugi.other = self.kaiba
+        self.kaiba.other = self.yugi
+        
+
+        self.turnplayer = self.yugi
+        self.otherplayer = self.kaiba
+        
+        for card in yugi_deck:
             self.cardsById[card.ID] = card
 
-        for card in self.otherplayer.deckzone.cards:
+        for card in kaiba_deck:
             self.cardsById[card.ID] = card
+
+        self.yugi.give_deck(yugi_deck)
+        self.kaiba.give_deck(kaiba_deck)
 
         self.normalsummonscounter = 0 #for the current turn
         self.lastaction = ""
@@ -51,8 +60,6 @@ class GameState:
         self.current_battle_phase_step = "None"
         self.current_damage_step_timing = "None"
         
-        
-        self.ownerofcurrenteffect = None
         self.curspellspeed = 0
         self.action_stack = []
         self.outer_action_stack_level = 0
@@ -63,7 +70,7 @@ class GameState:
         self.record_LRA = True
         self.lastresolvedactions = [] 
         
-        self.action_waiting_for_a_card_choice = None
+        self.action_waiting_for_a_choice = None
         self.answer_arg_name = None
 
         self.step_waiting_for_answer = None
@@ -72,7 +79,7 @@ class GameState:
 
         self.player_in_multiple_action_window = None
 
-        self.bannedactions = set()
+        
         self.monstersthatattackedthisturn = []
         self.monsters_to_be_destroyed_by_battle = []
 
@@ -103,7 +110,7 @@ class GameState:
             for i in range(n)
                 steps.append(RunAction - Discard)
 
-            
+           steps.append(ClearLRA) 
 
             for i in range(n)
                 steps.append(RunTheAction - Draw)
@@ -136,6 +143,9 @@ class GameState:
         self.phase_transition_asked_funcs = {'battle_phase' : self.set_battle_phase, 'main_phase_2' : self.set_main_phase_2,
                 'end_phase' : self.set_end_phase}
         
+
+        self.bans = []
+
         self.if_triggers = []
         self.is_building_a_chain = False
 
@@ -149,13 +159,12 @@ class GameState:
 
         self.chainable_optional_when_triggers = { 'VTP' : [], 'ITP' : [], 'VOP' : [], 'IOP' : [] }
 
-        self.triggerevents = []
-
-        self.AttackReplayTrigger = TriggerEvent("AttackReplayTrigger", None, None, "immediate", None, self.MatchAttackConditionChanges)
+        self.AttackReplayTrigger = TriggerEvent("AttackReplayTrigger", None, 
+                                    None, "immediate", None, self.MatchAttackConditionChanges)
         self.AttackReplayTrigger.funclist.append(self.SetReplayWasTriggered)
 
-        firstplayer.init_card_actions_and_effects(self)
-        otherplayer.init_card_actions_and_effects(self)
+        self.yugi.init_card_actions_and_effects(self)
+        self.kaiba.init_card_actions_and_effects(self)
 
     def startup(self):
         self.has_started = True
@@ -308,7 +317,21 @@ class GameState:
             self.keep_running_steps = True
             self.run_steps()
     
-    
+    def process_card_choice(self, cardid):
+        ccan = self.answer_arg_name
+        card = self.cardsById[cardid]
+        self.action_waiting_for_a_choice.args[ccan] = card
+
+        self.keep_running_steps = True
+        self.run_steps()
+
+    def process_zone_choice(self, zonename):
+        zcan = self.answer_arg_name
+        zone = self.zonesByName[zonename]
+        self.action_waiting_for_a_choice.args[zcan] = zone
+
+        self.keep_running_steps = True
+        self.run_steps()
 
     def reset_turn_variables(self):
         self.battlephasebegan = False
@@ -376,6 +399,12 @@ class GameState:
 
         return choices, choicesforcards
         
+    def add_ban(self, ban):
+        self.bans.append(ban)
+
+    def remove_ban(self, ban):
+        if ban in self.bans:
+            self.bans.remove(ban)
 
     def run_steps(self):
         while len(self.steps_to_do) > 0 and self.keep_running_steps == True:
@@ -388,13 +417,18 @@ class GameState:
             print("Finished running scheduled steps")
             
     def MatchAttackConditionChanges(self, action, gamestate):
-        if action.name == "Card Leaves Field" and action.card.owner == gamestate.otherplayer and action.card.cardclass == 'Monster':
+        if (action.__class__.__name__ == "CardLeavesZoneTriggers" and action.zone.type == "Field" 
+                and action.card.owner == gamestate.otherplayer and action.card.cardclass == 'Monster'):
+            return True
+        elif (action.__class__.__name__ == "CardEntersZoneTriggers" and action.zone.type == "Field"
+                and action.card.owner == gamestate.otherplayer and action.card.cardclass == "Monster"):
             return True
 
         return False
     
     def SetReplayWasTriggered(self, gamestate):
         gamestate.replay_was_triggered = True
+
         
     def stop_waiting_for_players(self):
         for spectator_id in self.spectators_to_refresh_view:
@@ -437,8 +471,6 @@ class GameState:
         
 
 def get_default_gamestate(sio, duel_id):
-    yugi = engine.Player.Player(0)
-    kaiba = engine.Player.Player(1)
     
     medesc0 = "A mystical defensive elf 0"
     addesc0 = "An attack dragon 0"
@@ -452,8 +484,13 @@ def get_default_gamestate(sio, duel_id):
     
     traphole0 = engine.Cards.TrapCard("Trap Hole", "Dump a monster with 1000 or more ATK", engine.Effect.TrapHoleEffect(), 'trap_hole.jpg')
 
-    yugi.give_deck([mysticalelf0, darkmagician0, traphole0])
-    kaiba.give_deck([summonedskull0, alexdragon0])
+    yugi_deck = [mysticalelf0, darkmagician0, traphole0]
+    kaiba_deck = ([summonedskull0, alexdragon0])
 
-    return GameState(yugi, kaiba, sio, duel_id)
+    theduel = GameState(yugi_deck, kaiba_deck, sio, duel_id)
+
+    #theduelcopy = copy.deepcopy(theduel)
+    #theduelcopy.sio = None #okay, that seems to work
+
+    return theduel
 
