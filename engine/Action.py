@@ -1,5 +1,5 @@
 import engine.HaltableStep
-from engine.defs import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT, CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_TRIGGER, STATE_ACTIVATE, STATE_RESOLVE
+from engine.defs import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT, CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_EVENT, STATE_ACTIVATE, STATE_RESOLVE
 
 
 class Action:
@@ -69,11 +69,11 @@ def TTRNonEmpty(gamestate, args):
 
 
 """
-The idea with RunTriggersCondition is that a further sequence of events (maybe including a chain) can always
-be launched from the RunTriggers of the pre-existing one. Every time a RunTriggers at the end of a sequence of events happens, 
+The idea with RunEventsCondition is that a further sequence of events (maybe including a chain) can always
+be launched from the RunEvents of the pre-existing one. Every time a RunEvents at the end of a sequence of events happens, 
 the outer action stack level is raised by 1.
 """
-def RunTriggersCondition(gamestate, args):
+def RunEventsCondition(gamestate, args):
     return len(gamestate.action_stack) == gamestate.outer_action_stack_level + 1
 
 def EndOfChainCondition(gamestate, args):
@@ -87,7 +87,7 @@ def RunIfSaysYes(gamestate, args, answer_arg_name):
     return answer == "Yes"
 
 
-class RunTriggers(Action): #this function will always be ran at the end of a chain or sequence of events
+class RunEvents(Action): #this function will always be ran at the end of a chain or sequence of events
     def __init__(self, for_what_event, at_end_of_events = True):
         self.at_end_of_events = at_end_of_events
         self.for_what_event = for_what_event
@@ -105,30 +105,30 @@ class RunTriggers(Action): #this function will always be ran at the end of a cha
         if (self.at_end_of_events):
             gamestate.outer_action_stack_level += 1
 
-        engine.HaltableStep.refresh_chainable_when_triggers(gamestate)
+        engine.HaltableStep.refresh_chainable_respond_events(gamestate)
 
         list_of_steps = []
 
-        for trigger in gamestate.saved_if_triggers['MTP']:
+        for trigger in gamestate.saved_trigger_events['MTP']:
             #if there is more than one trigger in a category and we are building a SEGOC chain, 
             #which we will always be doing since we are at the end of a previous chain, ask the player 
             #who owns the effects how he wants to order them in the chain
             gamestate.triggers_to_run.append(trigger)
 
-        for trigger in gamestate.saved_if_triggers['MOP']: #meme principe pour les autres
+        for trigger in gamestate.saved_trigger_events['MOP']: #meme principe pour les autres
             gamestate.triggers_to_run.append(trigger)
 
         
-        for trigger in gamestate.saved_if_triggers['OTP']:
+        for trigger in gamestate.saved_trigger_events['OTP']:
             list_of_steps.extend(self.ask_trigger_steps_util(trigger, 'turnplayer'))
 
-        for trigger in gamestate.chainable_optional_when_triggers['VTP']:
+        for trigger in gamestate.chainable_optional_respond_events['VTP']:
             list_of_steps.extend(self.ask_trigger_steps_util(trigger, 'turnplayer'))
 
-        for trigger in gamestate.saved_if_triggers['OOP']:
+        for trigger in gamestate.saved_trigger_events['OOP']:
             list_of_steps.extend(self.ask_trigger_steps_util(trigger, 'otherplayer'))
 
-        for trigger in gamestate.chainable_optional_when_triggers['VOP']:
+        for trigger in gamestate.chainable_optional_respond_events['VOP']:
             list_of_steps.extend(self.ask_trigger_steps_util(trigger, 'otherplayer'))
 
 
@@ -144,9 +144,8 @@ class RunTriggers(Action): #this function will always be ran at the end of a cha
         
         #then run the chain
         
-        list_of_steps.extend([engine.HaltableStep.ClearChainableWhenTriggers(self), #they'll be refreshed by the response windows that need them
-                                engine.HaltableStep.ClearSavedIfTriggers(self),  #we don't need those anymore
-                                engine.HaltableStep.ClearChainableIfTriggers(self), #and not those too
+        list_of_steps.extend([engine.HaltableStep.ClearChainableRespondEvents(self), #they'll be refreshed by the response windows that need them
+                                engine.HaltableStep.ClearSavedTriggerEvents(self),  #we don't need those anymore
                                 engine.HaltableStep.RunStepIfElseCondition(self, 
                                             engine.HaltableStep.LaunchTTR(self), 
                                             engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'turnplayer', 'for_what_event'), 
@@ -200,8 +199,8 @@ class DrawCard(Action):
 
     def default_run(self, gamestate):
         run_triggers_step = engine.HaltableStep.RunStepIfCondition(self, 
-                        engine.HaltableStep.RunAction(self, RunTriggers('Card drawn')), 
-                        RunTriggersCondition) if self.in_draw_phase == False else engine.HaltableStep.DoNothing(self)
+                        engine.HaltableStep.RunAction(self, RunEvents('Card drawn')), 
+                        RunEventsCondition) if self.in_draw_phase == False else engine.HaltableStep.DoNothing(self)
 
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                         engine.HaltableStep.DrawCardServer(self, 'drawncard'),
@@ -209,9 +208,9 @@ class DrawCard(Action):
                         engine.HaltableStep.CreateCard(self, 'drawncard', 'fromzone'),
                         engine.HaltableStep.ChangeCardVisibility(self, ['player'], 'drawncard', '1'),
                         engine.HaltableStep.MoveCard(self, 'drawncard', 'tozone'),
-                        engine.HaltableStep.ProcessIfTriggers(self),
+                        engine.HaltableStep.ProcessTriggerEvents(self),
                         engine.HaltableStep.AppendToLRAIfRecording(self),
-                        engine.HaltableStep.RunImmediateTriggers(self),
+                        engine.HaltableStep.RunImmediateEvents(self),
                         run_triggers_step,
                         engine.HaltableStep.PopActionStack(self)]
     
@@ -224,8 +223,8 @@ class DrawCard(Action):
 
 #reqs-less actions are there mostly just for triggers
 def run_for_trigger_action(action, gamestate):
-    list_of_steps = [engine.HaltableStep.RunImmediateTriggers(action),
-                    engine.HaltableStep.ProcessIfTriggers(action),
+    list_of_steps = [engine.HaltableStep.RunImmediateEvents(action),
+                    engine.HaltableStep.ProcessTriggerEvents(action),
                     engine.HaltableStep.AppendToLRAIfRecording(action)]
 
     for i in range(len(list_of_steps) - 1, -1, -1):
@@ -234,7 +233,7 @@ def run_for_trigger_action(action, gamestate):
     gamestate.run_steps()
 
 def run_for_trigger_pre_action(action, gamestate):
-    list_of_steps = [engine.HaltableStep.RunImmediateTriggers(action)]
+    list_of_steps = [engine.HaltableStep.RunImmediateEvents(action)]
     
     for i in range(len(list_of_steps) - 1, -1, -1):
         gamestate.steps_to_do.appendleft(list_of_steps[i])
@@ -242,7 +241,7 @@ def run_for_trigger_pre_action(action, gamestate):
     gamestate.run_steps()
 
 
-class PreCardLeavesZoneTriggers(Action):
+class PreCardLeavesZoneEvents(Action):
     def init(self, card, zone, parentAction):
         super().init("PreCardLeaves" + zone.type, card)
         self.zone = zone
@@ -252,7 +251,7 @@ class PreCardLeavesZoneTriggers(Action):
     def run(self, gamestate):
         run_for_trigger_pre_action(self, gamestate)
 
-class PreCardSentToZoneTriggers(Action):
+class PreCardSentToZoneEvents(Action):
     def init(self, card, zone, parentAction):
         super().init("PreCardSentTo" + zone.type, card)
         self.zone = zone
@@ -271,14 +270,14 @@ class ApplyBansForChangeCardZone(Action):
     def run(self, gamestate):
         run_for_trigger_pre_action(self, gamestate)
 
-class CardLeavesZoneTriggers(Action):
+class CardLeavesZoneEvents(Action):
     def init(self, card, zone):
         super().init("Card Leaves " + zone.type, card)
         self.zone = zone
         self.args = {}
 
     def default_run(self, gamestate):
-        #but its run_if_triggers has to be properly ordered in respect to other actions
+        #but its run_trigger_events has to be properly ordered in respect to other actions
         
         #gamestate.clear_lra_if_at_no_triggers() 
         #this is only a sequential sub-action (an intermediate step) so its LRA should be stacked with
@@ -288,7 +287,7 @@ class CardLeavesZoneTriggers(Action):
 
     run_func = default_run
 
-class CardSentToZoneTriggers(Action):
+class CardSentToZoneEvents(Action):
     def init(self, card, zone):
         super().init("Card sent to " + zone.type, card)
         self.args = {}
@@ -343,12 +342,12 @@ class ChangeCardZone(Action):
     def default_run(self, gamestate):
         
         clear_lra_step = engine.HaltableStep.DoNothing(self) if self.is_contained else engine.HaltableStep.ClearLRAIfRecording(self)
-        lzt_step = engine.HaltableStep.InitAndRunAction(self, CardLeavesZoneTriggers, 'card', 'fromzone') if self.with_leave_zone_trigger else engine.HaltableStep.DoNothing(self)
+        lzt_step = engine.HaltableStep.InitAndRunAction(self, CardLeavesZoneEvents, 'card', 'fromzone') if self.with_leave_zone_trigger else engine.HaltableStep.DoNothing(self)
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                             clear_lra_step,
-                            engine.HaltableStep.InitAndRunAction(self, PreCardLeavesZoneTriggers, 'card', 'fromzone', 'this_action'), 
+                            engine.HaltableStep.InitAndRunAction(self, PreCardLeavesZoneEvents, 'card', 'fromzone', 'this_action'), 
                             #This is for 'banish it when it leaves the field'-type triggers
-                            engine.HaltableStep.InitAndRunAction(self, PreCardSentToZoneTriggers, 'card', 'tozone', 'this_action'), 
+                            engine.HaltableStep.InitAndRunAction(self, PreCardSentToZoneEvents, 'card', 'tozone', 'this_action'), 
                             engine.HaltableStep.InitAndRunAction(self, TurnOffPassiveEffects, 'card', 'fromzone'),
                              engine.HaltableStep.InitAndRunAction(self, ApplyBansForChangeCardZone, 'card', 'this_action'),
                             #for deactivating cards when they leave the field, mostly
@@ -358,12 +357,12 @@ class ChangeCardZone(Action):
                                     EraseIfGYOrBanished, 'tozone'),
                             engine.HaltableStep.ChangeCardZoneServer(self, 'card', 'tozone'),
                             lzt_step,
-                            engine.HaltableStep.InitAndRunAction(self, CardSentToZoneTriggers, 'card', 'tozone'),
-                            engine.HaltableStep.ProcessIfTriggers(self),
+                            engine.HaltableStep.InitAndRunAction(self, CardSentToZoneEvents, 'card', 'tozone'),
+                            engine.HaltableStep.ProcessTriggerEvents(self),
                             engine.HaltableStep.AppendToLRAIfRecording(self),
-                            engine.HaltableStep.RunImmediateTriggers(self),
+                            engine.HaltableStep.RunImmediateEvents(self),
                             engine.HaltableStep.RunStepIfCondition(self, 
-                                engine.HaltableStep.RunAction(self, RunTriggers(self.name)), RunTriggersCondition),
+                                engine.HaltableStep.RunAction(self, RunEvents(self.name)), RunEventsCondition),
                             engine.HaltableStep.PopActionStack(self),
                             engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunMAWsAtEnd()), ActionStackEmpty)]
         
@@ -422,14 +421,14 @@ class FlipMonsterFaceUp(Action):
     def run(self, gamestate):
         #no ClearLRA because this will always be a sub-action
         list_of_steps = [engine.HaltableStep.ChangeCardVisibility(self, ['player1', 'player2'], 'monster', "1"),
-                        engine.HaltableStep.ProcessFlipTriggers(self)]
+                        engine.HaltableStep.ProcessFlipEvents(self)]
 
         #flip effects in a summon situation :
         #they will be added to the saved if-triggers 
         #and will thus be triggered during the SEGOC chain building at the end of the summon.
 
         #in a battle situation,
-        #the RunImmediateTriggers will add an if-trigger that triggers at AfterDamageCalculation
+        #the RunImmediateEvents will add an if-trigger that triggers at AfterDamageCalculation
 
         #so a flip trigger's category is 'if' (either mandatory or optional), but it goes in the gamestate.flip_triggers container.
         
@@ -476,9 +475,9 @@ class TributeMonsters(Action):
         for i in range(self.numtributesrequired):
             list_of_steps.extend(list_of_steps_for_one_tribute)
 
-        ending_steps = [engine.HaltableStep.ProcessIfTriggers(self), engine.HaltableStep.AppendToLRAIfRecording(self), 
-                        engine.HaltableStep.RunImmediateTriggers(self), 
-                        engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunTriggers('Monsters tributed')), RunTriggersCondition),
+        ending_steps = [engine.HaltableStep.ProcessTriggerEvents(self), engine.HaltableStep.AppendToLRAIfRecording(self), 
+                        engine.HaltableStep.RunImmediateEvents(self), 
+                        engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunEvents('Monsters tributed')), RunEventsCondition),
                         engine.HaltableStep.PopActionStack(self),
                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunMAWsAtEnd()), ActionStackEmpty)]
         
@@ -547,25 +546,27 @@ class NormalSummonMonster(SummonMonster):
             return card.numtributesrequired > 0
 
         gamestate.normalsummonscounter += 1 #optional : put that in a dedicated step (that must go before the summon negation window)
+        player = self.card.owner
+        self.args['zone_choices'] = [zone for zone in player.monsterzones.listofzones if zone.zonenum not in player.monsterzones.occupiedzonenums]
 
         #TODO : steps (and javascript) for the selection of a free zone
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                         engine.HaltableStep.ClearLRAIfRecording(self),
-                        engine.HaltableStep.ChooseFreeZone(self, 'actionplayer', 'Monster'),
                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, self.TributeAction), 
                                                                                     RunTributeCondition, 'summonedmonster'),
+                        engine.HaltableStep.ChooseFreeZone(self, 'actionplayer', 'zone_choices', 'chosen_zone'),
                         engine.HaltableStep.AskQuestion(self, 'actionplayer', 'choose_position', 'ATK_DEF', 'ATK_or_DEF_answer'),  
-                        engine.HaltableStep.InitAndRunAction(self, MonsterWouldBeSummonedTriggers, 'summonedmonster'),
+                        engine.HaltableStep.InitAndRunAction(self, MonsterWouldBeSummonedEvents, 'summonedmonster'),
                         engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'actionplayer', 'event1'), 
                         engine.HaltableStep.RunStepIfCondition(self, 
-                            engine.HaltableStep.InitAndRunAction(self, NormalSummonMonsterCore, 'summonedmonster', 'ATK_or_DEF_answer', 'this_action'), 
+                            engine.HaltableStep.InitAndRunAction(self, NormalSummonMonsterCore, 'summonedmonster', 'ATK_or_DEF_answer', 'chosen_zone', 'this_action'), 
                             CheckIfNotNegated, 'this_action'),
                         engine.HaltableStep.RunStepIfCondition(self, 
-                                engine.HaltableStep.RunAction(self, RunTriggers('Tribute and monster summoned')), 
-                                RunTriggersCondition),
+                                engine.HaltableStep.RunAction(self, RunEvents('Tribute and monster summoned')), 
+                                RunEventsCondition),
                         engine.HaltableStep.PopActionStack(self),
                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunMAWsAtEnd()), ActionStackEmpty)] 
-        #even if the summon is negated, we run RunTriggers, because there may be if-triggers that can be run, and even if there isn't any, some when triggers may be activatable (i.e. for the destroy that may have happened during the tribute).
+        #even if the summon is negated, we run RunEvents, because there may be if-triggers that can be run, and even if there isn't any, some when triggers may be activatable (i.e. for the destroy that may have happened during the tribute).
 
         #the summon negation window must first be open to the action player, and then to the other player if the action player has chosen not to play anything for it.
         for i in range(len(list_of_steps) - 1, -1, -1):
@@ -576,7 +577,7 @@ class NormalSummonMonster(SummonMonster):
 
     run_func = default_run
 
-class MonsterWouldBeSummonedTriggers(Action):
+class MonsterWouldBeSummonedEvents(Action):
     def init(self, card):
         super().init("Monster would be summoned", card)
         self.args = {}
@@ -585,17 +586,17 @@ class MonsterWouldBeSummonedTriggers(Action):
         run_for_trigger_action(self, gamestate)
 
 class NormalSummonMonsterCore(Action):
-    def init(self, card, position, parentNormalSummonAction):
+    def init(self, card, position, zone, parentNormalSummonAction):
         super().init("Normal Summon Monster", card)
-        self.args = {'summonedmonster': card, 'position' : position, 'chosenzone' : card.owner.monsterzones.listofzones[2], 
+        self.args = {'summonedmonster': card, 'position' : position, 'chosen_zone' : zone, 
                 'action_player' : card.owner, 'other_player' : card.owner.other}
         self.parentNormalSummonAction = parentNormalSummonAction
 
     def run(self, gamestate):
          #optional when-effects for the destroy occuring in Tribute miss their timing
         list_of_steps = [ engine.HaltableStep.ClearLRAIfRecording(self),
-                engine.HaltableStep.NSMCServer(self, 'summonedmonster', 'chosenzone', 'position'), 
-                         engine.HaltableStep.MoveCard(self, 'summonedmonster', 'chosenzone')]
+                engine.HaltableStep.NSMCServer(self, 'summonedmonster', 'chosen_zone', 'position'), 
+                         engine.HaltableStep.MoveCard(self, 'summonedmonster', 'chosen_zone')]
 
         if (self.args['position'] == "ATK"):
             list_of_steps.append(engine.HaltableStep.ChangeCardVisibility(self, ['other_player'], 'summonedmonster', "1"))
@@ -606,9 +607,9 @@ class NormalSummonMonsterCore(Action):
                                     engine.HaltableStep.RotateCard(self, 'summonedmonster', 'rotation')])
 
             
-        list_of_steps.extend([engine.HaltableStep.ProcessIfTriggers(self.parentNormalSummonAction),
+        list_of_steps.extend([engine.HaltableStep.ProcessTriggerEvents(self.parentNormalSummonAction),
                               engine.HaltableStep.AppendToLRAIfRecording(self.parentNormalSummonAction),
-                              engine.HaltableStep.RunImmediateTriggers(self.parentNormalSummonAction)])
+                              engine.HaltableStep.RunImmediateEvents(self.parentNormalSummonAction)])
 
         for i in range(len(list_of_steps) - 1, -1, -1):
             gamestate.steps_to_do.appendleft(list_of_steps[i])
@@ -706,10 +707,10 @@ class DeclareAttack(Action):
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                         engine.HaltableStep.ClearLRAIfRecording(self),
                         engine.HaltableStep.InitAndRunAction(self, SelectAttackTarget, 'attacking_monster', 'odaa', 'target_arg_name'),
-                        engine.HaltableStep.InitAndRunAction(self, AttackDeclarationTriggers, 'odaa'),
-                        engine.HaltableStep.InitAndRunAction(self, AttackTargetingTriggers, 'odaa'),
-                        engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunTriggers('Attack declared')), 
-                            RunTriggersCondition),
+                        engine.HaltableStep.InitAndRunAction(self, AttackDeclarationEvents, 'odaa'),
+                        engine.HaltableStep.InitAndRunAction(self, AttackTargetingEvents, 'odaa'),
+                        engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunEvents('Attack declared')), 
+                            RunEventsCondition),
                         engine.HaltableStep.PopActionStack(self),
                         engine.HaltableStep.SetMultipleActionWindow(gamestate.turnplayer, 'battle_phase_battle_step')]
         
@@ -753,9 +754,9 @@ class SelectAttackTarget(Action):
         gamestate.run_steps()
 
 
-class AttackDeclarationTriggers(Action):
+class AttackDeclarationEvents(Action):
     def init(self, parent_declare_attack_action):
-        super(AttackDeclarationTriggers, self).init("Attack declared", parent_declare_attack_action.card)
+        super(AttackDeclarationEvents, self).init("Attack declared", parent_declare_attack_action.card)
         self.pdaa = parent_declare_attack_action
         self.args = self.pdaa.args
 
@@ -763,9 +764,9 @@ class AttackDeclarationTriggers(Action):
         run_for_trigger_action(self, gamestate)
 
 
-class AttackTargetingTriggers(Action):
+class AttackTargetingEvents(Action):
     def init(self, parent_declare_attack_action):
-        super(AttackTargetingTriggers, self).init("Attack targeting", parent_declare_attack_action.card)
+        super(AttackTargetingEvents, self).init("Attack targeting", parent_declare_attack_action.card)
         self.pdaa = parent_declare_attack_action
         self.args = self.pdaa.args
 
@@ -845,10 +846,10 @@ class ReselectTargetCore(Action):
 
         
         list_of_steps = [engine.HaltableStep.InitAndRunAction(self, SelectAttackTarget, 'attacking_monster', 'odaa', 'target_arg_name'),
-                        engine.HaltableStep.InitAndRunAction(self, AttackTargetingTriggers, 'odaa'),
+                        engine.HaltableStep.InitAndRunAction(self, AttackTargetingEvents, 'odaa'),
                         engine.HaltableStep.RunStepIfCondition(self, 
-                            engine.HaltableStep.RunAction(self, RunTriggers()), 
-                            RunTriggersCondition)]
+                            engine.HaltableStep.RunAction(self, RunEvents()), 
+                            RunEventsCondition)]
 
         for i in range(len(list_of_steps) - 1, -1, -1):
                 gamestate.steps_to_do.appendleft(list_of_steps[i])
@@ -931,13 +932,13 @@ class LaunchDamageStep(Action):
         gamestate.current_battle_phase_step = 'damage_step'
         gamestate.indamagestep = True
         list_of_steps = [engine.HaltableStep.ClearLRAIfRecording(self),
-                        engine.HaltableStep.InitAndRunAction(self, StartOfDamageStepTriggers, 'this_action'), 
-                        engine.HaltableStep.RunAction(self, RunTriggers('damage_step_start', False)), 
+                        engine.HaltableStep.InitAndRunAction(self, StartOfDamageStepEvents, 'this_action'), 
+                        engine.HaltableStep.RunAction(self, RunEvents('damage_step_start', False)), 
                         engine.HaltableStep.ClearLRAIfRecording(self),
                         engine.HaltableStep.SetMultipleActionWindow(gamestate.turnplayer, 'damage_step_start'),
                         engine.HaltableStep.SetMultipleActionWindow(gamestate.otherplayer, 'damage_step_start'),
-                        engine.HaltableStep.InitAndRunAction(self, BeforeDamageCalculationTriggers, 'this_action'),
-                        engine.HaltableStep.RunAction(self, RunTriggers('damage_step_BDC', False)), 
+                        engine.HaltableStep.InitAndRunAction(self, BeforeDamageCalculationEvents, 'this_action'),
+                        engine.HaltableStep.RunAction(self, RunEvents('damage_step_BDC', False)), 
                         engine.HaltableStep.ClearLRAIfRecording(self),
                         engine.HaltableStep.RunStepIfCondition(self,
                             engine.HaltableStep.InitAndRunAction(self, FlipMonsterFaceUp, 'target'), 
@@ -947,23 +948,23 @@ class LaunchDamageStep(Action):
                         engine.HaltableStep.RunStepIfCondition(self,
                             engine.HaltableStep.InitAndRunAction(self, DuringDamageCalculation, 'this_action'),
                                 TargetMonsterStillOnField, 'target'),
-                        engine.HaltableStep.InitAndRunAction(self, AfterDamageCalculationTriggers, 'this_action'),
-                        engine.HaltableStep.RunAction(self, RunTriggers('damage_step_ADC', False)), 
+                        engine.HaltableStep.InitAndRunAction(self, AfterDamageCalculationEvents, 'this_action'),
+                        engine.HaltableStep.RunAction(self, RunEvents('damage_step_ADC', False)), 
                         engine.HaltableStep.ClearLRAIfRecording(self),
                         engine.HaltableStep.SetMultipleActionWindow(gamestate.turnplayer, 'damage_step_ADC'),
                         engine.HaltableStep.SetMultipleActionWindow(gamestate.otherplayer, 'damage_step_ADC'),
                         engine.HaltableStep.InitAndRunAction(self, BattleSendsMonstersToGraveyard, 'this_action'),
-                        engine.HaltableStep.InitAndRunAction(self, EndOfDamageStepTriggers, 'this_action'),
-                        engine.HaltableStep.RunAction(self, RunTriggers('damage_step_end',False)),
+                        engine.HaltableStep.InitAndRunAction(self, EndOfDamageStepEvents, 'this_action'),
+                        engine.HaltableStep.RunAction(self, RunEvents('damage_step_end',False)),
                         engine.HaltableStep.ClearLRAIfRecording(self),
                         engine.HaltableStep.SetMultipleActionWindow(gamestate.turnplayer, 'damage_step_end'),
                         engine.HaltableStep.SetMultipleActionWindow(gamestate.otherplayer, 'damage_step_end'),
                         engine.HaltableStep.InitAndRunAction(self, CeaseDuringDamageStepEffects, 'this_action')]
 
-            #a flip effect will work as a mandatory or optional if-effect that triggers at AfterDamageCalculationTriggers.
+            #a flip effect will work as a mandatory or optional if-effect that triggers at AfterDamageCalculationEvents.
             #Otherwise it could be triggered during the open window following BeforeDamageCalculation.
             #So FlipMonsterFaceUp can be fed immediate triggers that register the monster's flip effect
-            #as having to be added to chainable_optional_when_triggers at AfterDamageCalculation.
+            #as having to be added to chainable_optional_respond_events at AfterDamageCalculation.
             #It's either that or I implement a special gamestate container for flip-effect monsters 
             #having to trigger their flip-effect at the next AfterDamageCalculation.
 
@@ -991,21 +992,21 @@ class DamageStepTriggerAction(Action):
     def run(self, gamestate):
         run_for_trigger_action(self, gamestate)
         
-class StartOfDamageStepTriggers(DamageStepTriggerAction):
+class StartOfDamageStepEvents(DamageStepTriggerAction):
     def init(self, ds_action):
-        super(StartOfDamageStepTriggers, self).init(ds_action)
+        super(StartOfDamageStepEvents, self).init(ds_action)
 
     def run(self, gamestate):
         gamestate.current_damage_step_timing = "start"
-        super(StartOfDamageStepTriggers,self).run(gamestate)
+        super(StartOfDamageStepEvents,self).run(gamestate)
 
-class BeforeDamageCalculationTriggers(DamageStepTriggerAction):
+class BeforeDamageCalculationEvents(DamageStepTriggerAction):
     def init(self, ds_action):
-        super(BeforeDamageCalculationTriggers, self).init(ds_action)
+        super(BeforeDamageCalculationEvents, self).init(ds_action)
 
     def run(self, gamestate):
         gamestate.current_damage_step_timing = "before_damage_calculation"
-        super(BeforeDamageCalculationTriggers,self).run(gamestate)
+        super(BeforeDamageCalculationEvents,self).run(gamestate)
 
 class DuringDamageCalculation(Action):
     def init(self, ds_action):
@@ -1014,15 +1015,15 @@ class DuringDamageCalculation(Action):
 
     def run(self, gamestate):
         gamestate.current_damage_step_timing = "during_damage_calculation"
-        list_of_steps = [engine.HaltableStep.RunImmediateTriggers(self),
-                        engine.HaltableStep.ProcessIfTriggers(self),
+        list_of_steps = [engine.HaltableStep.RunImmediateEvents(self),
+                        engine.HaltableStep.ProcessTriggerEvents(self),
                         engine.HaltableStep.AppendToLRAIfRecording(self),
-                        engine.HaltableStep.RunAction(self, RunTriggers('during damage calculation', False)),
+                        engine.HaltableStep.RunAction(self, RunEvents('during damage calculation', False)),
                         engine.HaltableStep.PerformDamageCalculation(self, 'loserplayer', 'LPamount'),
                         engine.HaltableStep.ChangeLifePointsAnimation(self, 'loserplayer', 'LPamount'),
                         engine.HaltableStep.StopDuelIfVictoryCondition(self),
-                        engine.HaltableStep.InitAndRunAction(self, MonstersMarkedTriggersForAll, 'this_action'),
-                        #engine.HaltableStep.RunAction(self, RunTriggers('monsters marked triggers', False)),
+                        engine.HaltableStep.InitAndRunAction(self, MonstersMarkedEventsForAll, 'this_action'),
+                        #engine.HaltableStep.RunAction(self, RunEvents('monsters marked triggers', False)),
                         engine.HaltableStep.ClearLRAIfRecording(self)]
                
         for i in range(len(list_of_steps) - 1, -1, -1):
@@ -1035,7 +1036,7 @@ class DuringDamageCalculation(Action):
         #which probably won't be used as most 'destroyed by battle' effects trigger during the end of the damage step,
         #when the monsters are actually sent to the graveyard.
 
-class MonstersMarkedTriggersForAll(Action):
+class MonstersMarkedEventsForAll(Action):
     def init(self, ds_action):
         self.ds_action = ds_action
         self.args = ds_action.args
@@ -1045,37 +1046,37 @@ class MonstersMarkedTriggersForAll(Action):
         counter = 0
         for monster in gamestate.monsters_to_be_destroyed_by_battle:
             self.args['monster' + str(counter)] = monster
-            list_of_steps.append(engine.HaltableStep.InitAndRunAction(self, MonsterMarkedTriggers, 'monster' + str(counter)))
+            list_of_steps.append(engine.HaltableStep.InitAndRunAction(self, MonsterMarkedEvents, 'monster' + str(counter)))
         
         for i in range(len(list_of_steps) - 1, -1, -1):
                 gamestate.steps_to_do.appendleft(list_of_steps[i])
         
         gamestate.run_steps()
 
-class MonsterMarkedTriggers(Action):
+class MonsterMarkedEvents(Action):
     def init(self, card):
-        super(MonsterMarkedTriggers, self).init(card)
+        super(MonsterMarkedEvents, self).init(card)
 
     def run(self, gamestate):
         run_for_trigger_action(self, gamestate)
 
 
 
-class AfterDamageCalculationTriggers(DamageStepTriggerAction):
+class AfterDamageCalculationEvents(DamageStepTriggerAction):
     def init(self, ds_action):
-        super(AfterDamageCalculationTriggers, self).init(ds_action)
+        super(AfterDamageCalculationEvents, self).init(ds_action)
 
     def run(self, gamestate):
         gamestate.current_damage_step_timing = "after_damage_calculation"
-        super(AfterDamageCalculationTriggers,self).run(gamestate)
+        super(AfterDamageCalculationEvents,self).run(gamestate)
 
-class EndOfDamageStepTriggers(DamageStepTriggerAction):
+class EndOfDamageStepEvents(DamageStepTriggerAction):
     def init(self, ds_action):
-        super(EndOfDamageStepTriggers, self).init(ds_action)
+        super(EndOfDamageStepEvents, self).init(ds_action)
 
     def run(self, gamestate):
         gamestate.current_damage_step_timing = "end"
-        super(EndOfDamageStepTriggers,self).run(gamestate)
+        super(EndOfDamageStepEvents,self).run(gamestate)
 
 
 class BattleSendsMonstersToGraveyard(Action):
@@ -1105,8 +1106,8 @@ class DestroyMonsterByBattle(Action):
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                         engine.HaltableStep.InitAndRunAction(self, ChangeCardZone, 'destroy_type', 'monster', 'DestroyActionIsContained'),
                         engine.HaltableStep.AppendToLRAIfRecording(self),
-                        engine.HaltableStep.ProcessIfTriggers(self),
-                        engine.HaltableStep.RunImmediateTriggers(self),
+                        engine.HaltableStep.ProcessTriggerEvents(self),
+                        engine.HaltableStep.RunImmediateEvents(self),
                         engine.HaltableStep.PopActionStack(self)]
         
         for i in range(len(list_of_steps) - 1, -1, -1):
@@ -1120,7 +1121,7 @@ class CeaseDuringDamageStepEffects(DamageStepTriggerAction):
         super(CeaseDuringDamageStepEffects, self).init(ds_action)
 
     def run(self, gamestate):
-        list_of_steps = [engine.HaltableStep.RunImmediateTriggers(self)]
+        list_of_steps = [engine.HaltableStep.RunImmediateEvents(self)]
 
         for i in range(len(list_of_steps) - 1, -1, -1):
                 gamestate.steps_to_do.appendleft(list_of_steps[i])

@@ -1,5 +1,5 @@
 
-from engine.Action import Action, ChainSendsToGraveyard, RunResponseWindows, RunTriggers, RunMAWsAtEnd, ActionStackEmpty, EndOfChainCondition, RunTriggersCondition, TTRNonEmpty, CheckIfNotNegated
+from engine.Action import Action, ChainSendsToGraveyard, RunResponseWindows, RunEvents, RunMAWsAtEnd, ActionStackEmpty, EndOfChainCondition, RunEventsCondition, TTRNonEmpty, CheckIfNotNegated
 
 import engine.HaltableStep
 
@@ -16,11 +16,11 @@ class SetSpellTrap(Action):
                         engine.HaltableStep.SetSpellTrapServer(self, 'set_card', 'chosen_zone'),
                         engine.HaltableStep.MoveCard(self, 'set_card', 'chosen_zone'),
                         engine.HaltableStep.ChangeCardVisibility(self, ['player'], 'set_card', "0"),
-                        engine.HaltableStep.ProcessIfTriggers(self),
+                        engine.HaltableStep.ProcessTriggerEvents(self),
                         engine.HaltableStep.AppendToLRAIfRecording(self),
-                        engine.HaltableStep.RunImmediateTriggers(self),
-                        engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunTriggers('Spell/Trap set')), 
-                            RunTriggersCondition),
+                        engine.HaltableStep.RunImmediateEvents(self),
+                        engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunEvents('Spell/Trap set')), 
+                            RunEventsCondition),
                         engine.HaltableStep.PopActionStack(self),
                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunMAWsAtEnd()), ActionStackEmpty)]
 
@@ -69,7 +69,7 @@ def get_spelltrap_resolve_steps(action):
 
                          engine.HaltableStep.RunStepIfCondition(action, 
                                                 engine.HaltableStep.RunAction(action, ChainSendsToGraveyard()), EndOfChainCondition),
-                         engine.HaltableStep.RunStepIfCondition(action, engine.HaltableStep.RunAction(action, RunTriggers('Chain resolved')), RunTriggersCondition),
+                         engine.HaltableStep.RunStepIfCondition(action, engine.HaltableStep.RunAction(action, RunEvents('Chain resolved')), RunEventsCondition),
                          engine.HaltableStep.PopActionStack(action),
                          engine.HaltableStep.RunStepIfCondition(action, engine.HaltableStep.RunAction(action, RunMAWsAtEnd()), ActionStackEmpty)]
 
@@ -132,10 +132,11 @@ class ActivateNormalOrQuickPlaySpell(Action):
                          place_card_on_field_step, 
                          engine.HaltableStep.ActivateSpellTrapBeforeActivate(self, 'card', 'effect', 'chosen_zone'),
                          engine.HaltableStep.ChangeCardVisibility(self, ['otherplayer', 'actionplayer'], 'card', "1"),
+                         engine.HaltableStep.AppendToChainLinks(self),
                          engine.HaltableStep.DisableLRARecording(self),
                          engine.HaltableStep.CallEffectActivate(self, 'effect'),
                          engine.HaltableStep.EnableLRARecording(self),
-                         engine.HaltableStep.AppendToChainLinks(self),
+                         engine.HaltableStep.ProcessMandatoryQuickEffects(self),
                          engine.HaltableStep.RunStepIfElseCondition(self, engine.HaltableStep.LaunchTTR(self), 
                     engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'otherplayer', 'action_name'), TTRNonEmpty)] + get_spelltrap_resolve_steps(self)
 
@@ -180,10 +181,11 @@ class ActivateNormalTrap(Action):
                         engine.HaltableStep.SetBuildingChain(self),
                          engine.HaltableStep.ActivateSpellTrapBeforeActivate(self, 'card', 'effect'),
                          engine.HaltableStep.ChangeCardVisibility(self, ['otherplayer', 'actionplayer'], 'card', "1"),
+                         engine.HaltableStep.AppendToChainLinks(self),
                          engine.HaltableStep.DisableLRARecording(self),
                          engine.HaltableStep.CallEffectActivate(self, 'effect'),
                          engine.HaltableStep.EnableLRARecording(self),
-                         engine.HaltableStep.AppendToChainLinks(self),
+                         engine.HaltableStep.ProcessMandatoryQuickEffects(self),
                          engine.HaltableStep.RunStepIfElseCondition(self, engine.HaltableStep.LaunchTTR(self), 
                              engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'otherplayer', 'action_name'), TTRNonEmpty)] + get_spelltrap_resolve_steps(self)
                          
@@ -218,11 +220,13 @@ class ResolveEffectCore(Action):
 
     
     def run(self, gamestate):
-        list_of_steps = [engine.HaltableStep.ClearLRAIfRecording(self),
+        list_of_steps = [engine.HaltableStep.ProcessTriggerEvents(self),
+                         engine.HaltableStep.RunImmediateEvents(self), #for 'an effect is resolving' (see Abyss-scale of the Kraken)
+                        engine.HaltableStep.ClearLRAIfRecording(self),
                          engine.HaltableStep.CallEffectResolve(self, 'effect')] #the Effect Resolve will call its own trigger-setting steps
-                         #engine.HaltableStep.ProcessIfTriggers(self),
+                         #engine.HaltableStep.ProcessTriggerEvents(self),
                          #engine.HaltableStep.AppendToLRAIfRecording(self), #for the actual action of resolving the card
-                         #engine.HaltableStep.RunImmediateTriggers(self)]
+                         #engine.HaltableStep.RunImmediateEvents(self)]
 
         self.run_steps(gamestate, list_of_steps)
 

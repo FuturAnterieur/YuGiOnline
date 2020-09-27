@@ -3,7 +3,7 @@ import engine.Cards
 import engine.Effect
 import engine.HaltableStep
 import engine.Player
-from engine.TriggerEvent import TriggerEvent
+from engine.Event import Event
 
 import copy
 
@@ -137,7 +137,7 @@ class GameState:
         self.spectators_to_refresh_view = []
 
         self.curphase = "Before startup"
-        self.phase_transition_triggers = {'draw_phase' : [], 'standby_phase' : [], 'main_phase_1' : [],
+        self.phase_transition_events = {'draw_phase' : [], 'standby_phase' : [], 'main_phase_1' : [],
                                 'battle_phase' : [], 'main_phase_2' : [], 'end_phase' : [], 'turn_switch' : []}
 
         self.phase_transition_asked_funcs = {'battle_phase' : self.set_battle_phase, 'main_phase_2' : self.set_main_phase_2,
@@ -146,20 +146,20 @@ class GameState:
 
         self.bans = []
 
-        self.if_triggers = []
+        self.flip_events = []
+        self.trigger_events = []
         self.is_building_a_chain = False
 
-        self.when_triggers = []
-        self.immediate_triggers = []
+        self.respond_events = [] #categories : Visible, Invisible, Mandatory
+        self.immediate_events = []
     
         self.triggers_to_run = []
 
-        self.saved_if_triggers = {'MTP' : [], 'MOP' : [], 'OTP' : [], 'OOP' : []}
-        self.chainable_optional_if_triggers = {'OTP' : [], 'OOP' : []}
+        self.saved_trigger_events = {'MTP' : [], 'MOP' : [], 'OTP' : [], 'OOP' : []}
+        
+        self.chainable_optional_respond_events = { 'VTP' : [], 'ITP' : [], 'VOP' : [], 'IOP' : [] }
 
-        self.chainable_optional_when_triggers = { 'VTP' : [], 'ITP' : [], 'VOP' : [], 'IOP' : [] }
-
-        self.AttackReplayTrigger = TriggerEvent("AttackReplayTrigger", None, 
+        self.AttackReplayTrigger = Event("AttackReplayTrigger", None, 
                                     None, "immediate", None, self.MatchAttackConditionChanges)
         self.AttackReplayTrigger.funclist.append(self.SetReplayWasTriggered)
 
@@ -187,7 +187,7 @@ class GameState:
         self.curphase = phase_name
         self.sio.emit('phase_change', {'phase_name' : phase_name}, room="duel" + str(self.duel_id) + "_public_info")
         self.lastresolvedactions.clear()
-        for trigger in self.phase_transition_triggers[phase_name]: #phase transition triggers are also TriggerEvents
+        for trigger in self.phase_transition_events[phase_name]: #phase transition triggers are also Events
             if trigger.matches(self): #but their matches function checks against the current gamestate, and not an action
                 trigger.execute(self)
 
@@ -268,10 +268,7 @@ class GameState:
     def run_action_asked_for(self, cardId, action_name):
         if (self.player_to_stop_waiting_when_run_action is not None):
 
-            if_trigger_cat_to_clear = 'OTP' if self.player_to_stop_waiting_when_run_action.other == self.turnplayer else 'OOP'
-
-            engine.HaltableStep.clear_chainable_if_triggers(self, if_trigger_cat_to_clear)
-            engine.HaltableStep.clear_chainable_when_triggers(self)
+            engine.HaltableStep.clear_chainable_respond_events(self)
 
             waiting_player = self.player_to_stop_waiting_when_run_action
             self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
@@ -299,11 +296,7 @@ class GameState:
             
             if (answer == "No"):
                 self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
-                
-                if_trigger_cat_to_clear = 'OTP' if responding_player == self.turnplayer else 'OOP'
-
-                engine.HaltableStep.clear_chainable_if_triggers(self, if_trigger_cat_to_clear)
-                engine.HaltableStep.clear_chainable_when_triggers(self)
+                engine.HaltableStep.clear_chainable_respond_events(self)
 
                 self.keep_running_steps = True
                 self.run_steps()

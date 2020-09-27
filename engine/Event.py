@@ -1,8 +1,8 @@
 
-class TriggerEvent:
+class Event:
     def __init__(self, name, card, effect, triggertype, category, matches):
         self.card = card
-        self.type = triggertype
+        self.type = triggertype #respond or trigger
         self.category = category
         self.name = name
         self.matches = matches

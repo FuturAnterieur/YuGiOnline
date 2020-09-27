@@ -46,33 +46,33 @@ var CardManager = {
 	this.initZone("my", "GY", 750, 420);
 	this.initZone("my", "Hand", 450, 500);
 
-	var i = 0; var my_monster_x_start = 100; var my_monster_y = 360;
+	var i = 0; var x_start = 100; var my_monster_y = 360;
 
 	for(i = 0; i < 5; i++)
 	{
-	    this.initZone("my", "Monster" + i, my_monster_x_start + i*this.zoneWidth, my_monster_y);
+	    this.initZone("my", "Monster" + i, x_start + i*this.zoneWidth, my_monster_y);
 	}
 
-	var my_spelltrap_x_start = 100; var my_spelltrap_y = 420;
+	var my_spelltrap_y = 420;
 	for(i = 0; i < 5; i++)
 	{
-	    this.initZone("my", "Spelltrap" + i, my_spelltrap_x_start + i*this.zoneWidth, my_spelltrap_y);
+	    this.initZone("my", "Spelltrap" + i, x_start + i*this.zoneWidth, my_spelltrap_y);
 	}
 	
 	this.initZone("his", "Deck", 150, 20);
 	this.initZone("his", "GY", 150, 180);
 	this.initZone("his", "Hand", 450, 20);
 
-	var his_monster_x_start = 100; var his_monster_y = 180;
+	var his_monster_y = 180;
 	for(i = 0; i < 5; i++)
 	{
-	    this.initZone("his", "Monster" + i, his_monster_x_start + i*this.zoneWidth, his_monster_y);
+	    this.initZone("his", "Monster" + i, x_start + i*this.zoneWidth, his_monster_y);
 	}
 
-	var his_spelltrap_x_start = 100; var his_spelltrap_y = 90;
+	var his_spelltrap_y = 90;
 	for(i = 0; i < 5; i++)
 	{
-	    this.initZone("his", "Spelltrap" + i, his_spelltrap_x_start + i*this.zoneWidth, his_spelltrap_y);
+	    this.initZone("his", "Spelltrap" + i, x_start + i*this.zoneWidth, his_spelltrap_y);
 	}
 
 	this.clickableZones = [];

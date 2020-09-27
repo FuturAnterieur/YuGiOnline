@@ -1,10 +1,10 @@
 
 import engine.Action
 import engine.HaltableStep
-from engine.TriggerEvent import TriggerEvent
+from engine.Event import Event
 import engine.Bans
 
-from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_TRIGGER, STATE_ACTIVATE, STATE_RESOLVE
+from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_EVENT, STATE_ACTIVATE, STATE_RESOLVE
 
 class Effect:
     def __init__(self, name, etype):
@@ -46,15 +46,15 @@ class PassiveEffect(Effect):
 
 
 def MatchOnADC(action, gamestate):
-    return action.__class__.__name__ == "AfterDamageCalculationTriggers"
+    return action.__class__.__name__ == "AfterDamageCalculationEvents"
 
 class FlipEffect(Effect):
     def __init__(self, name, etype, parent_card):
         super(FlipEffect, self).__init__(name, etype, parent_card)
-        self.ADC_trigger = None
+        self.ADC_event = None
 
-    def RemoveADCTriggerFromIfTriggers(self, gamestate):
-        gamestate.if_triggers.remove(self.ADC_trigger)
+    def RemoveADCEventFromTriggerEvents(self, gamestate):
+        gamestate.trigger_events.remove(self.ADC_event)
 
 class UnaffectedByTrap(Effect):
     def __init__(self):
@@ -65,7 +65,7 @@ class UnaffectedByTrap(Effect):
         self.is_negated = False
 
     def blocks_action(self, action, effect_state = STATE_NOTINEFFECT):
-        #Allow triggers to match and activation actions to proceed, but cause Resolves to proceed without effect
+        #Allow events to match and activation actions to proceed, but cause Resolves to proceed without effect
         if action.parent_effect.parentCard.cardclass == "Trap" and action.parent_effect is not None and effect_state == STATE_RESOLVE:
             return True
         else:
@@ -99,35 +99,35 @@ class TrapHoleEffect(Effect):
 
         self.potential_targets = []
 
-        self.effect_trigger = TriggerEvent("TrapHoleTrigger", self.parentCard, self, "when", "I", self.MatchOnTHCompatibleSummon)
-        self.effect_trigger.funclist.append(self.LaunchNormalTrapActivationForTH)
+        self.effect_event = Event("TrapHoleEvent", self.parentCard, self, "respond", "I", self.MatchOnTHCompatibleSummon)
+        self.effect_event.funclist.append(self.LaunchNormalTrapActivationForTH)
 
-        self.set_trigger = TriggerEvent("TrapHoleOnSet", self.parentCard, self, "immediate", "", self.MatchOnTHSet)
-        self.set_trigger.funclist.append(self.TurnOnTHTrigger)
+        self.set_event = Event("TrapHoleOnSet", self.parentCard, self, "immediate", "", self.MatchOnTHSet)
+        self.set_event.funclist.append(self.TurnOnTHEvent)
 
-        self.leaves_field_trigger = TriggerEvent("TrapHoleOnLeaveField", self.parentCard,
+        self.leaves_field_event = Event("TrapHoleOnLeaveField", self.parentCard,
                                                     self, "immediate", "", self.MatchTHTurnOff)
         
-        self.leaves_field_trigger.funclist.append(self.TurnOffTHTrigger)
+        self.leaves_field_event.funclist.append(self.TurnOffTHEvent)
 
-        gamestate.immediate_triggers.append(self.set_trigger)
-        gamestate.immediate_triggers.append(self.leaves_field_trigger)
+        gamestate.immediate_events.append(self.set_event)
+        gamestate.immediate_events.append(self.leaves_field_event)
 
     def MatchOnTHSet(self, action, gamestate):
         return action.__class__.__name__ == "SetSpellTrap" and action.card == self.parentCard
 
-    def TurnOnTHTrigger(self, gamestate):
-        gamestate.when_triggers.append(self.effect_trigger)
+    def TurnOnTHEvent(self, gamestate):
+        gamestate.respond_events.append(self.effect_event)
 
     def MatchTHTurnOff(self, action, gamestate):
         return action.__class__.__name__ == "TurnOffPassiveEffects" and action.zone.type == "Field" and action.card == self.parentCard
-        #if it was a CardLeavesZoneTriggers, it wouldn't work in all cases, because if an effect is negated, 
-        #the destruction of its card does not call a CardLeavesZoneTriggers step
+        #if it was a CardLeavesZoneEvents, it wouldn't work in all cases, because if an effect is negated, 
+        #the destruction of its card does not call a CardLeavesZoneEvents step
 
 
-    def TurnOffTHTrigger(self, gamestate):
-        if (self.effect_trigger in gamestate.when_triggers):
-            gamestate.when_triggers.remove(self.effect_trigger)
+    def TurnOffTHEvent(self, gamestate):
+        if (self.effect_event in gamestate.respond_events):
+            gamestate.respond_events.remove(self.effect_event)
 
 
     def MatchOnTHCompatibleSummon(self, action, gamestate):
@@ -138,7 +138,7 @@ class TrapHoleEffect(Effect):
 
             HypotheticalDestroyAction = engine.Action.ChangeCardZone()
             HypotheticalDestroyAction.init(engine.Action.CCZDESTROY, action.card, False, self)
-            if HypotheticalDestroyAction.check_for_bans_and_immunities(action.card, gamestate, STATE_TRIGGER):
+            if HypotheticalDestroyAction.check_for_bans_and_immunities(action.card, gamestate, STATE_EVENT):
                 result = True
                 self.potential_targets.append(action.card)
 
@@ -150,8 +150,8 @@ class TrapHoleEffect(Effect):
     def reqs(self, gamestate):
         #Trap card immunity as well as Targeting/Destroying bans are implemented in the MatchOnTHCompatibleSummon function
 
-        full_category = engine.HaltableStep.TranslateTriggerCategory(self.effect_trigger, gamestate)
-        return self.effect_trigger in gamestate.chainable_optional_when_triggers[full_category]
+        full_category = engine.HaltableStep.TranslateEventCategory(self.effect_event, gamestate)
+        return self.effect_event in gamestate.chainable_optional_respond_events[full_category]
 
         #Trap Hole actually works through the summon response window (but not the summon negation window) 
         #AND the summon response window will work through lastresolvedactions 
@@ -190,7 +190,7 @@ class ImperialIronWallTurnOnEffect(Effect):
         self.IIWpassiveeffect = ImperialIronWallPassiveEffect()
         self.IIWpassiveeffect.init(gamestate, card)
 
-        self.IIWTO = TriggerEvent("IIWTO", self.parentCard, self, "immediate", "", self.MatchIIWTurnOff)
+        self.IIWTO = Event("IIWTO", self.parentCard, self, "immediate", "", self.MatchIIWTurnOff)
         self.IIWTO.funclist.append(self.OnIIWTurnOff)
 
     def reqs(self, gamestate):
@@ -201,15 +201,15 @@ class ImperialIronWallTurnOnEffect(Effect):
 
     def Resolve(self, gamestate):
         self.IIWpassiveeffect.TurnOn(gamestate)
-        gamestate.immediate_triggers.append(self.IIWTO)
+        gamestate.immediate_events.append(self.IIWTO)
         
     def MatchIIWTurnOff(self, action):
         return action.__class__.__name__ == "TurnOffPassiveEffects" and action.zone.type == "Field" and action.card == self.parentCard
 
     def OnIIWTurnOff(self, gamestate):
         self.SWpassiveeffect.TurnOff(gamestate)
-        if self.IIWTO in gamestate.immediate_triggers:
-            gamestate.immediate_triggers.remove(self.IIWTO)
+        if self.IIWTO in gamestate.immediate_events:
+            gamestate.immediate_events.remove(self.IIWTO)
 
 
 class ImperialIronWallPassiveEffect(PassiveEffect):
@@ -226,7 +226,7 @@ class ImperialIronWallPassiveEffect(PassiveEffect):
 
         self.BanishBan = engine.Bans.BanishBan()
 
-        self.IIWOnCardBanished = TriggerEvent("IIWOnBanish", self.parentCard, self, "immediate", "", self.MatchOnCardBanished)
+        self.IIWOnCardBanished = Event("IIWOnBanish", self.parentCard, self, "immediate", "", self.MatchOnCardBanished)
         self.IIWOnCardBanished.funclist.append(self.PreventBanish)
 
     
@@ -243,19 +243,19 @@ class ImperialIronWallPassiveEffect(PassiveEffect):
         self.intercepted_action.name = self.intercepted_action.intended_action
         self.intercepted_action.args['tozone'] = self.intercepted_action.intended_tozone
 
-        #CCZ actions whose intended goal is to banish will all be caught by the ban, either at triggering time (check in the MatchTrigger function),
+        #CCZ actions whose intended goal is to banish will all be caught by the ban, either at eventing time (check in the MatchEvent function),
         #before activation time (check in the reqs function) or at resolving time (in the Resolve function).
 
     def TurnOn(self, gamestate):
         if self.is_on == False and self.is_negated == False:
             self.is_on = True
             gamestate.add_ban(self.BanishBan)
-            gamestate.immediate_triggers.append(self.IIWOnCardBanished)
+            gamestate.immediate_events.append(self.IIWOnCardBanished)
 
     def TurnOff(self, gamestate):
         if self.is_on:
             gamestate.remove_ban(self.BanishBan)
-            gamestate.immediate_triggers.remove(self.IIWOnCardBanished)
+            gamestate.immediate_events.remove(self.IIWOnCardBanished)
 
         self.is_on = False
         self.is_dormant = False
