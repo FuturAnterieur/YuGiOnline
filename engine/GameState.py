@@ -146,18 +146,33 @@ class GameState:
 
         self.bans = []
 
-        self.flip_events = []
-        self.trigger_events = []
+        
+        self.trigger_events = [] #categories : MSS1, OSS1, OFast (i.e. Consolation Prize). MFast is considered as a respond event.
+        self.flip_events = [] 
+        
         self.is_building_a_chain = False
 
-        self.respond_events = [] #categories : Visible, Invisible, Mandatory
+        self.respond_events = []  #categories : OSS1, MSS1 (does not exist, I think. Mandatory when-effects are actually trigger events), 
+                                    #OFast (i.e. Trap Hole), and MFast (i.e. Doomcaliber Knight)
         self.immediate_events = []
     
         self.triggers_to_run = []
 
-        self.saved_trigger_events = {'MTP' : [], 'MOP' : [], 'OTP' : [], 'OOP' : []}
+        self.saved_trigger_events = {'MSS1TP' : [], 'MSS1OP' : [], 'OSS1TP' : [], 'OSS1OP' : [], 'OFastTP' : [], 'OFastOP' : []}
         
-        self.chainable_optional_respond_events = { 'VTP' : [], 'ITP' : [], 'VOP' : [], 'IOP' : [] }
+        self.chainable_ss1_respond_events = { 'MSS1TP' : [], 'OSS1TP' : [], 'MSS1OP' : [], 'OSS1OP' : [] }
+        self.chainable_ss1_trigger_events = { 'MSS1TP' : [], 'OSS1TP' : [], 'MSS1OP' : [], 'OSS1OP' : [] }
+
+        self.chainable_optional_fast_respond_events = []
+        self.chainable_optional_fast_trigger_events = []
+
+        self.chainable_events = {'respond_MSS1TP' : [], 'respond_MSS1OP' : [], 'respond_OSS1TP' : [], 'respond_OSS1OP' : [],
+                                    'respond_OFast' : [],
+                                'trigger_MSS1TP' : [],  'trigger_MSS1OP' : [], 'trigger_OSS1TP' : [], 'trigger_OSS1OP' : [],
+                                'trigger_OFast' : []}
+
+        
+        #Mandatory fast events go directly in self.triggers_to_run
 
         self.AttackReplayTrigger = Event("AttackReplayTrigger", None, 
                                     None, "immediate", None, self.MatchAttackConditionChanges)
@@ -268,7 +283,7 @@ class GameState:
     def run_action_asked_for(self, cardId, action_name):
         if (self.player_to_stop_waiting_when_run_action is not None):
 
-            engine.HaltableStep.clear_chainable_respond_events(self)
+            engine.HaltableStep.clear_chainable_optional_fast_respond_events(self)
 
             waiting_player = self.player_to_stop_waiting_when_run_action
             self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
@@ -290,14 +305,16 @@ class GameState:
 
         if self.step_waiting_for_answer.__class__.__name__ == "OpenWindowForResponse":
             #no need for the question code if we use that
-
+            
+            
             responding_player = self.step_waiting_for_answer.args[self.step_waiting_for_answer.rpan]
             waiting_player = responding_player.other
             
             if (answer == "No"):
-                self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
-                engine.HaltableStep.clear_chainable_respond_events(self)
+                engine.HaltableStep.clear_chainable_optional_fast_respond_events(self)
 
+                self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
+                
                 self.keep_running_steps = True
                 self.run_steps()
 

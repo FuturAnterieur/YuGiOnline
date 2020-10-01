@@ -4,7 +4,7 @@ import engine.HaltableStep
 from engine.Event import Event
 import engine.Bans
 
-from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_EVENT, STATE_ACTIVATE, STATE_RESOLVE
+from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_EVENT, STATE_ACTIVATE, STATE_RESOLVE, CAUSE_EFFECT
 
 class Effect:
     def __init__(self, name, etype):
@@ -14,8 +14,8 @@ class Effect:
         self.ActivateActionInfoList = []
         self.ResolveActionLInfoList = []
 
-    def init(self, parentCard):
-        self.parentCard = parentCard
+    def init(self, parent_card):
+        self.parent_card = parent_card
 
     def blocks_action(self, action, effect_state = STATE_NOTINEFFECT):
         return False
@@ -28,8 +28,8 @@ class PassiveEffect(Effect):
         self.is_negated = False
         self.is_on = False
         
-    def init(self, parentCard):
-        super().init(self, parentCard)
+    def init(self, parent_card):
+        super().init(self, parent_card)
 
     def Negate(self, gamestate):
         if self.is_on:
@@ -66,7 +66,7 @@ class UnaffectedByTrap(Effect):
 
     def blocks_action(self, action, effect_state = STATE_NOTINEFFECT):
         #Allow events to match and activation actions to proceed, but cause Resolves to proceed without effect
-        if action.parent_effect.parentCard.cardclass == "Trap" and action.parent_effect is not None and effect_state == STATE_RESOLVE:
+        if action.parent_effect is not None and action.parent_effect.parent_card.cardclass == "Trap" and effect_state == STATE_RESOLVE:
             return True
         else:
             return False
@@ -81,7 +81,7 @@ class CantBeTargetedByTrap(Effect):
         self.is_negated = False
 
     def blocks_action(self, action, effect_state = STATE_NOTINEFFECT):
-        if action.parent_effect.parentCard.cardclass == "Trap" and action.__class__.__name__ == "Target":
+        if action.parent_effect.parent_card.cardclass == "Trap" and action.__class__.__name__ == "Target":
             return True
         else:
             return False
@@ -99,28 +99,26 @@ class TrapHoleEffect(Effect):
 
         self.potential_targets = []
 
-        self.effect_event = Event("TrapHoleEvent", self.parentCard, self, "respond", "I", self.MatchOnTHCompatibleSummon)
+        self.effect_event = Event("TrapHoleEvent", self.parent_card, self, "respond", "OFast", self.MatchOnTHCompatibleSummon)
         self.effect_event.funclist.append(self.LaunchNormalTrapActivationForTH)
 
-        self.set_event = Event("TrapHoleOnSet", self.parentCard, self, "immediate", "", self.MatchOnTHSet)
+        self.set_event = Event("TrapHoleOnSet", self.parent_card, self, "immediate", "", self.MatchOnTHSet)
         self.set_event.funclist.append(self.TurnOnTHEvent)
 
-        self.leaves_field_event = Event("TrapHoleOnLeaveField", self.parentCard,
-                                                    self, "immediate", "", self.MatchTHTurnOff)
-        
+        self.leaves_field_event = Event("TrapHoleOnLeaveField", self.parent_card, self, "immediate", "", self.MatchTHTurnOff)
         self.leaves_field_event.funclist.append(self.TurnOffTHEvent)
 
         gamestate.immediate_events.append(self.set_event)
         gamestate.immediate_events.append(self.leaves_field_event)
 
     def MatchOnTHSet(self, action, gamestate):
-        return action.__class__.__name__ == "SetSpellTrap" and action.card == self.parentCard
+        return action.__class__.__name__ == "SetSpellTrap" and action.card == self.parent_card
 
     def TurnOnTHEvent(self, gamestate):
         gamestate.respond_events.append(self.effect_event)
 
     def MatchTHTurnOff(self, action, gamestate):
-        return action.__class__.__name__ == "TurnOffPassiveEffects" and action.zone.type == "Field" and action.card == self.parentCard
+        return action.__class__.__name__ == "TurnOffPassiveEffects" and action.zone.type == "Field" and action.card == self.parent_card
         #if it was a CardLeavesZoneEvents, it wouldn't work in all cases, because if an effect is negated, 
         #the destruction of its card does not call a CardLeavesZoneEvents step
 
@@ -135,10 +133,11 @@ class TrapHoleEffect(Effect):
         if action.name == "Normal Summon Monster" and action.card.face_up == True and action.card.attack >= 1000:
 
             #do the check for the Activate's Target action too
-
+            print("MatchOnTHCompatible found valid target. Checking immunities...")
             HypotheticalDestroyAction = engine.Action.ChangeCardZone()
             HypotheticalDestroyAction.init(engine.Action.CCZDESTROY, action.card, False, self)
             if HypotheticalDestroyAction.check_for_bans_and_immunities(action.card, gamestate, STATE_EVENT):
+                print("Immunity test passed. Target is valid.")
                 result = True
                 self.potential_targets.append(action.card)
 
@@ -150,14 +149,11 @@ class TrapHoleEffect(Effect):
     def reqs(self, gamestate):
         #Trap card immunity as well as Targeting/Destroying bans are implemented in the MatchOnTHCompatibleSummon function
 
-        full_category = engine.HaltableStep.TranslateEventCategory(self.effect_event, gamestate)
-        return self.effect_event in gamestate.chainable_optional_respond_events[full_category]
+        return self.effect_event.is_in_chainable_events(gamestate)
 
         #Trap Hole actually works through the summon response window (but not the summon negation window) 
         #AND the summon response window will work through lastresolvedactions 
-        
-        return lastactionscontainmatch # or summonresponsewindowmatches 
-
+         
     def Activate(self, gamestate):
         #choose the target if many choices are possible (which would only happen if 
         #many monsters are summoned at once, which I am not even sure is possible)
@@ -173,7 +169,7 @@ class TrapHoleEffect(Effect):
             self.current_state_for_checks = STATE_RESOLVE
 
             DestroyAction = engine.Action.ChangeCardZone()
-            DestroyAction.init(engine.Action.CCZDESTROY, self.TargetedMonster, False, self)
+            DestroyAction.init(engine.Action.CCZDESTROY, self.TargetedMonster, CAUSE_EFFECT, self, False, True)
         
             if DestroyAction.check_for_bans_and_immunities(self.TargetedMonster, gamestate, STATE_RESOLVE):
                 DestroyAction.run(gamestate)
@@ -190,7 +186,7 @@ class ImperialIronWallTurnOnEffect(Effect):
         self.IIWpassiveeffect = ImperialIronWallPassiveEffect()
         self.IIWpassiveeffect.init(gamestate, card)
 
-        self.IIWTO = Event("IIWTO", self.parentCard, self, "immediate", "", self.MatchIIWTurnOff)
+        self.IIWTO = Event("IIWTO", self.parent_card, self, "immediate", "", self.MatchIIWTurnOff)
         self.IIWTO.funclist.append(self.OnIIWTurnOff)
 
     def reqs(self, gamestate):
@@ -204,7 +200,7 @@ class ImperialIronWallTurnOnEffect(Effect):
         gamestate.immediate_events.append(self.IIWTO)
         
     def MatchIIWTurnOff(self, action):
-        return action.__class__.__name__ == "TurnOffPassiveEffects" and action.zone.type == "Field" and action.card == self.parentCard
+        return action.__class__.__name__ == "TurnOffPassiveEffects" and action.zone.type == "Field" and action.card == self.parent_card
 
     def OnIIWTurnOff(self, gamestate):
         self.SWpassiveeffect.TurnOff(gamestate)
@@ -226,7 +222,7 @@ class ImperialIronWallPassiveEffect(PassiveEffect):
 
         self.BanishBan = engine.Bans.BanishBan()
 
-        self.IIWOnCardBanished = Event("IIWOnBanish", self.parentCard, self, "immediate", "", self.MatchOnCardBanished)
+        self.IIWOnCardBanished = Event("IIWOnBanish", self.parent_card, self, "immediate", "", self.MatchOnCardBanished)
         self.IIWOnCardBanished.funclist.append(self.PreventBanish)
 
     

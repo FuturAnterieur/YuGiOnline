@@ -1,7 +1,9 @@
 
 from engine.Action import Action, ChainSendsToGraveyard, RunResponseWindows, RunEvents, RunMAWsAtEnd, ActionStackEmpty, EndOfChainCondition, RunEventsCondition, TTRNonEmpty, CheckIfNotNegated
 
-import engine.HaltableStep
+import engine.HaltableStep  
+
+from engine.defs import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT
 
 class SetSpellTrap(Action):
     
@@ -136,9 +138,8 @@ class ActivateNormalOrQuickPlaySpell(Action):
                          engine.HaltableStep.DisableLRARecording(self),
                          engine.HaltableStep.CallEffectActivate(self, 'effect'),
                          engine.HaltableStep.EnableLRARecording(self),
-                         engine.HaltableStep.ProcessMandatoryQuickEffects(self),
-                         engine.HaltableStep.RunStepIfElseCondition(self, engine.HaltableStep.LaunchTTR(self), 
-                    engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'otherplayer', 'action_name'), TTRNonEmpty)] + get_spelltrap_resolve_steps(self)
+                         engine.HaltableStep.ProcessMandatoryRespondEvents(self),
+                         engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'otherplayer', 'action_name')] + get_spelltrap_resolve_steps(self)
 
 
 
@@ -172,7 +173,7 @@ def basic_reqs_for_trap(action, gamestate):
 class ActivateNormalTrap(Action):
     
     def init(self, card, effect):
-        super(ActivateNormalTrap, self).init("Activate Normal Trap", card)
+        super().init("Activate Normal Trap", card)
         self.effect = effect
         self.args = {'this_action' : self, 'card' : card, 'effect' : effect, 'actionplayer' : card.owner, 
                         'otherplayer' : card.owner.other, 'action_name' : 'Normal trap activated'}
@@ -185,9 +186,8 @@ class ActivateNormalTrap(Action):
                          engine.HaltableStep.DisableLRARecording(self),
                          engine.HaltableStep.CallEffectActivate(self, 'effect'),
                          engine.HaltableStep.EnableLRARecording(self),
-                         engine.HaltableStep.ProcessMandatoryQuickEffects(self),
-                         engine.HaltableStep.RunStepIfElseCondition(self, engine.HaltableStep.LaunchTTR(self), 
-                             engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'otherplayer', 'action_name'), TTRNonEmpty)] + get_spelltrap_resolve_steps(self)
+                         engine.HaltableStep.ProcessMandatoryRespondEvents(self),
+                         engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'otherplayer', 'action_name')] + get_spelltrap_resolve_steps(self)
                          
 
     def reqs(self, gamestate):
@@ -214,7 +214,7 @@ class ActivateNormalTrap(Action):
 
 class ResolveEffectCore(Action):
     def init(self, card, effect):
-        super(ResolveNormalTrapCore, self).init("Activate Normal Trap", card)
+        super().init("Activate Normal Trap", card)
         self.effect = effect
         self.args = {'effect' : effect}
 

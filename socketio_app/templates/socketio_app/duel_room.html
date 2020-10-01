@@ -116,19 +116,31 @@ $(document).ready(function(){
 		{
 		     $("#message").text(QuestionCodes[parts[0]]);
 		}
-		choices = msg.choices.split("_");
-		html_buttons = "";
-		for(var i = 0; i < choices.length; i++)
+		
+		if (msg.choices.length < 2)
 		{
-			cur_button = "<button id=\"" + "btn" + i + "\">" + choices[i] + "</button>";
-			html_buttons = html_buttons + cur_button;
+			CardManager.question = msg.question;
+			CardManager.only_choice = msg.choices[0];
+			var cur_waiter = setTimeout(function () { 
+		 		console.log('wait complete');
+		 		CardManager.sendAnswer(CardManager.question, CardManager.only_choice); 
+	     		}, 500);
 		}
-		$("#choice_buttons").html(html_buttons);
-		for(var i = 0; i < choices.length; i++)
+		else
 		{
-		    $("#btn" + i).click(function() {
-			CardManager.sendAnswer(msg.question, $(this).text() );
-		    });
+			html_buttons = "";
+			for(var i = 0; i < msg.choices.length; i++)
+			{
+				cur_button = "<button id=\"" + "btn" + i + "\">" + msg.choices[i] + "</button>";
+				html_buttons = html_buttons + cur_button;
+			}
+			$("#choice_buttons").html(html_buttons);
+			for(var i = 0; i < msg.choices.length; i++)
+			{
+			    $("#btn" + i).click(function() {
+				CardManager.sendAnswer(msg.question, $(this).text() );
+			    });
+			}
 		}
 	});
 	socket.on('choose_next_phase', function(msg) {

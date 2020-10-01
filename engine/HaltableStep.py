@@ -1,5 +1,5 @@
 from engine.defs import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT
-from engine.Event import Event
+from engine.Event import Event, AppendPlayerToEventCategory
 
 from engine.Effect import MatchOnADC
 import time
@@ -44,104 +44,144 @@ class DisableLRARecording(HaltableStep):
     def run(self, gamestate):
         gamestate.record_LRA = False
 
-def TranslateTriggerCategory(trigger, gamestate):
-    player_str = "TP" if trigger.card.owner == gamestate.turnplayer else "OP"
-
-    return trigger.category + player_str
-
-
 class ProcessTriggerEvents(HaltableStep): #this step should be run at the end of each action
     
     def run(self, gamestate):
         for trigger in gamestate.trigger_events: #mandatory when-effects that aren't quick also go in this category
             if trigger.matches(self.parentAction, gamestate):
-                full_category = TranslateTriggerCategory(trigger, gamestate)
+                full_category = AppendPlayerToEventCategory(trigger, gamestate)
                 gamestate.saved_trigger_events[full_category].append(trigger) 
                 #where they are saved for the next SEGOC chain (following the next resolution of events)
 
-       
-
 class ProcessFlipEvents(HaltableStep):
     def run(self, gamestate):
-        for trigger in gamestate.flip_events:
-            if trigger.matches(self.parentAction, gamestate):
+        for event in gamestate.flip_events:
+            if event.matches(self.parentAction, gamestate):
                 #if we are in the damage step, the flip effect triggers at After Damage Calculation
                 if gamestate.curphase == "battle_phase" and gamestate.current_battle_phase_step == "damage_step":
-                    trigger.effect.ADC_trigger = Event("FlipTriggerADC", trigger.card, trigger.effect, 'trigger', trigger.category, MatchOnADC) 
+                    event.effect.ADC_event = Event("FlipTriggerADC", event.card, event.effect, 'trigger', event.category, MatchOnADC) 
                     #to see how MatchOnADC works, check out the TestFunctionOutsideOfClass.py file
-                    trigger.effect.ADC_trigger.funclist.extend([trigger.effect.RemoveADCEventFromTriggerEvents] + trigger.funclist)
-                    gamestate.trigger_events.append(trigger.effect.ADC_trigger)
+                    event.effect.ADC_event.funclist.extend([event.effect.RemoveADCEventFromTriggerEvents] + event.funclist)
+                    gamestate.trigger_events.append(event.effect.ADC_event)
 
                 else:
                     #else, the flip effect behaves like a 'normal' trigger event
-                    full_category = TranslateTriggerCategory(trigger, gamestate)
-                    gamestate.saved_trigger_events[full_category].append(trigger)
+                    full_category = AppendPlayerToEventCategory(event, gamestate)
+                    gamestate.saved_trigger_events[full_category].append(event)
                     
 
-class ProcessMandatoryQuickEffects(HaltableStep):
+class ProcessMandatoryRespondEvents(HaltableStep):
     #this is pretty much just for doomcaliber knight and LaDD up to this point
+    #Can mandatory quick-effects also check the last resolved actions and/or be activated 
+    #outside of a chain, at the end of a chain resolving?
     def run(self, gamestate):
+        if len(gamestate.triggers_to_run) == 0: #only run if a SEGOC schedule has completed or if there was none
+            triggers_to_run_queue = {'MFastTP' : [], 'MFastOP' : []}
+            
+            #search for the highest matching action in the chain links.
+            #A respond can only respond to one action at the same time.
+            for trigger in gamestate.respond_events:
+                if trigger.category == "MFast" and trigger.action_it_responds_to is None: 
+                    highest_matching_chain_link = None
+                    for action in gamestate.chainlinks:
+                        if trigger.matches(action, gamestate):
+                            highest_matching_chain_link = action
+                    
+                    if highest_matching_chain_link is not None:
+                        full_category = AppendPlayerToEventCategory(trigger, gamestate)
+                        triggers_to_run_queue[full_category].append(trigger)
+                        trigger.action_it_responds_to = highest_matching_chain_link
 
-        triggers_to_run_queue = {'MTP' : [], 'MOP' : []}
-        
-        #search for the highest matching action in the chain links
+                    
+            #TODO : player choice of trigger order if there are many triggers in the same category
+            for trigger in triggers_to_run_queue['MFastTP']:
+                gamestate.triggers_to_run.append(trigger)
+            
+            for trigger in triggers_to_run_queue['MFastOP']:
+                gamestate.triggers_to_run.append(trigger)
 
-        for trigger in gamestate.respond_events:
-            if trigger.category == "M" and trigger.action_it_responds_to is None: 
-                highest_matching_chain_link = None
-                for action in gamestate.chainlinks:
-                    if trigger.matches(action, gamestate):
-                        highest_matching_chain_link = action
-                
-                if highest_matching_chain_link is not None:
-                    full_category = TranslateTriggerCategory(trigger, gamestate)
-                    triggers_to_run_queue[full_category].append(trigger)
-                    trigger.action_it_responds_to = highest_matching_chain_link
-
-                
-        #TODO : player choice of trigger order if there are many triggers in the same category
-        for trigger in triggers_to_run_queue['MTP']:
-            gamestate.triggers_to_run.append(trigger)
-        
-        for trigger in triggers_to_run_queue['MOP']:
-            gamestate.triggers_to_run.append(trigger)
-
-
-def refresh_chainable_respond_events(gamestate): 
-    #This will be run at each chain response window as well as at the start of the SEGOC chain building process
-    #the chainable_optional_respond_events container will be emptied after these processes
-    #the categories for when triggers : VTP (visible turn player), ITP (invisible turn player), VOP and IOP (for other player)
+def refresh_chainable_ss1_respond_events(gamestate):
+    
     for trigger in gamestate.respond_events:
-        full_category = TranslateTriggerCategory(trigger, gamestate)
-        for action in gamestate.lastresolvedactions:
-            if trigger.matches(action, gamestate):
-                gamestate.chainable_optional_respond_events[full_category].append(trigger)
+        if trigger.category == "OSS1" or trigger.category == "MSS1": 
+            #a spell speed test would be trivial, since refresh_chainable_ss1 is only called before the building of a SEGOC chain
+            #also MSS1 respond events don't really exist but I added them here as a theoretical construct
+            full_category = "respond_" + AppendPlayerToEventCategory(trigger, gamestate)
+            for action in gamestate.lastresolvedactions:
+                if trigger.matches(action, gamestate):
+                    gamestate.chainable_events[full_category].append(trigger)
 
-        if len(gamestate.chainlinks) > 0:
-            if trigger.matches(gamestate.chainlinks[-1], gamestate):
-                gamestate.chainable_optional_respond_events[full_category].append(trigger)
-        
-        
-        
-        
-def clear_chainable_respond_events(gamestate):
-    for category in gamestate.chainable_optional_respond_events.keys():
-        gamestate.chainable_optional_respond_events[category].clear()
+def clear_chainable_ss1_respond_events(gamestate):
+    for category in ['respond_' + x for x in ['MSS1TP', 'MSS1OP', 'OSS1TP', 'OSS1OP']]:
+            gamestate.chainable_events[category].clear()
+
+def refresh_chainable_ss1_trigger_events(gamestate):
+    for category in ['OSS1TP', 'OSS1OP', 'MSS1TP', 'MSS1OP']:
+        for event in gamestate.saved_trigger_events[category]:
+            gamestate.chainable_events['trigger_' + category].append(event)
 
 
-class RefreshChainableRespondEvents(HaltableStep):
-    def run(self, gamestate):
-        refresh_chainable_respond_events(gamestate)
+def clear_chainable_ss1_trigger_events(gamestate):
+    for category in ['trigger_' + x for x in ['MSS1TP', 'MSS1OP', 'OSS1TP', 'OSS1OP']]:
+        gamestate.chainable_events[category].clear()
 
-class ClearChainableRespondEvents(HaltableStep):
-    def run(self, gamestate):
-        clear_chainable_respond_events(gamestate)
+def refresh_SEGOC_events(gamestate):
+    refresh_chainable_ss1_respond_events(gamestate)
+    refresh_chainable_ss1_trigger_events(gamestate)
+
+def refresh_chainable_optional_fast_respond_events(gamestate): 
+    #this is called at each response window during the building of a chain
+    
+    clear_chainable_optional_fast_respond_events(gamestate)
+    #they are also cleared at the closing of the response windows
+
+    for trigger in gamestate.respond_events:
+        if trigger.category == "OFast" and trigger.is_spell_speed_sufficient(gamestate): 
+            #the spell speed condition will also be checked in the 
+            #activate effect action's reqs, so it is somehow redundant here
+            #but that way, we are sure that no non-chainable event goes in the chainable_events container.
+            for action in gamestate.lastresolvedactions:
+                if trigger.matches(action, gamestate):
+                    gamestate.chainable_events["respond_OFast"].append(trigger)
+
+            if len(gamestate.chainlinks) > 0:
+                if trigger.matches(gamestate.chainlinks[-1], gamestate):
+                    gamestate.chainable_events["respond_OFast"].append(trigger)
+        
+def clear_chainable_optional_fast_respond_events(gamestate):
+    gamestate.chainable_events["respond_OFast"].clear()
+
+    #for category in gamestate.chainable_optional_fast_respond_events.keys():
+    #    gamestate.chainable_optional_fast_respond_events[category].clear()
+
+def refresh_chainable_optional_fast_trigger_events(gamestate):
+    clear_chainable_optional_fast_trigger_events(gamestate)
+    #it's important to clear them beforehand so that the optional fast trigger events 
+    #that were chainable in the previous chain are not chainable in the new one.
+    for category in ['OFastTP', 'OFastOP']:
+        for event in gamestate.saved_trigger_events[category]:
+            gamestate.chainable_events["trigger_OFast"].append(event)
+
+def clear_chainable_optional_fast_trigger_events(gamestate):
+    gamestate.chainable_events["trigger_OFast"].clear()
+   # for category in gamestate.chainable_optional_fast_trigger_events.keys():
+    #    gamestate.chainable_optional_fast_trigger_events[category].clear()
+
+
 
 class ClearSavedTriggerEvents(HaltableStep):
     def run(self, gamestate):
         for category in gamestate.saved_trigger_events.keys():
             gamestate.saved_trigger_events[category].clear()
         
+class ClearSEGOCChainableEvents(HaltableStep):
+    def run(self, gamestate):
+        clear_chainable_ss1_trigger_events(gamestate)
+        clear_chainable_ss1_respond_events(gamestate)
+
+class ClearChainableOptionalFastTriggerEvents(HaltableStep):
+    def run(self, gamestate):
+        clear_chainable_optional_fast_trigger_events(gamestate)
 
 #On the other hand, Immediate triggers can be ran even while a chain is resolving.
 #They are mostly there for OnLeaveField triggers of continuous spell and trap cards,
@@ -627,13 +667,13 @@ class OpenWindowForResponse(HaltableStep):
 
         responding_player = self.args[self.rpan]
         waiting_player = responding_player.other
+
         #check if responding player can play something first
-        
-        refresh_chainable_respond_events(gamestate)
+        refresh_chainable_optional_fast_respond_events(gamestate)
 
         possible_cards, choices_per_card = gamestate.get_available_choices(responding_player)
         
-        answer_choices = 'Yes_No' if len(possible_cards) > 0 else 'No'
+        answer_choices = ['Yes', 'No'] if len(possible_cards) > 0 else ['No']
         
         gamestate.sio.emit('start_waiting', {'reason' : self.response_type},
                                 room =  "duel" + str(gamestate.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
@@ -657,12 +697,12 @@ class SetMultipleActionWindow(HaltableStep):
         self.current_phase_or_step = current_phase_or_step
     
     def run(self, gamestate):
-        #Note that refresh_chainable_respond_events is not run here 
+        #Note that refresh_chainable_optional_respond_events is not run here 
         #(and a refresh is always followed by a clearing of the chainable triggers container once the window closes),
         #so when-triggers can only be ran in a response window,
         #and not from an open game state (represented by the SetMutltipleActionWindow step).
 
-        gamestate.lastresolvedactions.clear() #but just to be sure
+        gamestate.lastresolvedactions.clear() #I think I can put this here
         
         gamestate.player_in_multiple_action_window = self.controlling_player
 
