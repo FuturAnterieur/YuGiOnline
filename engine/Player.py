@@ -21,7 +21,7 @@ class Player:
         self.graveyard = self.register_zone(Zones.Graveyard(strpid + "_GY", self))
         self.banished = self.register_zone(Zones.Banished(strpid + "_Banished", self))
         self.fieldzone = self.register_zone(Zones.Zone(strpid + "_Field", 1, self, "FieldSpell"))
-        self.lifepoints = 1000
+        self.lifepoints = 4000
         self.other = None
         self.normalsummonsperturn = 1
         self.gamestate = None

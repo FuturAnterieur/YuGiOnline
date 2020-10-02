@@ -61,6 +61,7 @@ class MonsterCard(Card):
         self.position = "None"
         self.attacks_declared_this_turn = 0
         self.max_attacks_per_turn = 1
+        self.can_attack_directly = False
         self.summonmethod = "Normal"
 
         self.actiondict["Normal Summon"] = Action.NormalSummonMonster()

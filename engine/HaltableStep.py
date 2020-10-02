@@ -762,7 +762,7 @@ class SetBattleStep(HaltableStep):
         gamestate.current_battle_phase_step = 'battle_step'
         gamestate.attack_declared = False
         gamestate.attack_declared_action = None
-        gamestate.immediate_triggers.append(gamestate.AttackReplayTrigger)
+        gamestate.immediate_events.append(gamestate.AttackReplayTrigger)
 
 
         

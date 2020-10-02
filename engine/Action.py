@@ -756,10 +756,7 @@ class DeclareAttack(Action):
                         engine.HaltableStep.PopActionStack(self),
                         engine.HaltableStep.SetMultipleActionWindow(gamestate.turnplayer, 'battle_phase_battle_step')]
         
-        for i in range(len(list_of_steps) - 1, -1, -1): 
-            gamestate.steps_to_do.appendleft(list_of_steps[i])
-
-        gamestate.run_steps()
+        self.run_steps(gamestate, list_of_steps)
 
     run_func = default_run
 
@@ -820,7 +817,7 @@ class AttackTargetingEvents(Action):
 def AttackTargetingReplayCondition(gamestate, args):
     ret = False
     
-    is_direct_attack_possible_now = gamestate.attack_declared_action.card.is_direct_attack_possible(gamestate)
+    is_direct_attack_possible_now = gamestate.attack_declared_action.is_direct_attack_possible(gamestate)
 
     if gamestate.replay_was_triggered:
         ret = True
@@ -860,7 +857,7 @@ class AttackTargetingReplay(Action):
 
         choices = ['CancelAttack', 'SelectTarget'] if is_attack_still_possible else ['CancelAttack']
 
-        gamestate.immediate_triggers.append(gamestate.AttackReplayTrigger)
+        gamestate.immediate_events.append(gamestate.AttackReplayTrigger)
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                         engine.HaltableStep.ClearLRAIfRecording(self),
                         engine.HaltableStep.AskQuestion(self, 'player', "replay_action_choice", choices, 'rac_answer'),
@@ -893,7 +890,7 @@ class ReselectTargetCore(Action):
         list_of_steps = [engine.HaltableStep.InitAndRunAction(self, SelectAttackTarget, 'attacking_monster', 'odaa', 'target_arg_name'),
                         engine.HaltableStep.InitAndRunAction(self, AttackTargetingEvents, 'odaa'),
                         engine.HaltableStep.RunStepIfCondition(self, 
-                            engine.HaltableStep.RunAction(self, RunEvents()), 
+                            engine.HaltableStep.RunAction(self, RunEvents('Attack declared (replay)')), 
                             RunEventsCondition)]
 
         for i in range(len(list_of_steps) - 1, -1, -1):
@@ -914,8 +911,8 @@ For now, there is only a trigger checking if an opponent's monster has left the 
 but we would also need to check for :
 
 - Any situation where The number of monsters on the turn player's opponent's side of the field changes, no matter how briefly
-    (so that also means to check if monsters are added to the opponent's side of the field, and to check if there are ownership switches)
-This first condition can be dealt with with immediate triggers. But two other conditions can cause a replay :
+    (so that also means to check if monsters are added to the opponent's side of the field, and to check if there are controllership switches)
+This first condition can be dealt with with immediate triggers. But according to the wiki, two other conditions can cause a replay :
 
 - A monster is no longer able to attack.
 - A monster that is attacking another monster gains the ability to attack directly due to a card effect.
@@ -928,7 +925,7 @@ class BattleStepBranchOut(Action):
         self.args = {}
         list_of_steps = []
 
-        gamestate.immediate_triggers.remove(gamestate.AttackReplayTrigger)
+        gamestate.immediate_events.remove(gamestate.AttackReplayTrigger)
 
         if gamestate.attack_declared == True:
             self.args['ad_action'] = gamestate.attack_declared_action
@@ -1022,12 +1019,11 @@ class LaunchDamageStep(Action):
 class RestOfDamageStep(Action):
     def init(self, damage_step_action):
         self.ds_action = damage_step_action
-        self.ad_action = damage_step_action.attack_declare_action
+        self.ad_action = damage_step_action.ad_action
         self.args = self.ad_action.args
         self.args['ad_action'] = self.ad_action
         self.args['this_action'] = self.ds_action
     
-
     def run(self, gamestate):
         list_of_steps = [engine.HaltableStep.InitAndRunAction(self, DuringDamageCalculation, 'this_action'),
                         engine.HaltableStep.InitAndRunAction(self, AfterDamageCalculationEvents, 'this_action'),
