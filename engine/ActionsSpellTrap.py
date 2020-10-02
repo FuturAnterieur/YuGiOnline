@@ -138,7 +138,6 @@ class ActivateNormalOrQuickPlaySpell(Action):
                          engine.HaltableStep.DisableLRARecording(self),
                          engine.HaltableStep.CallEffectActivate(self, 'effect'),
                          engine.HaltableStep.EnableLRARecording(self),
-                         engine.HaltableStep.ProcessMandatoryRespondEvents(self),
                          engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'otherplayer', 'action_name')] + get_spelltrap_resolve_steps(self)
 
 
@@ -186,7 +185,6 @@ class ActivateNormalTrap(Action):
                          engine.HaltableStep.DisableLRARecording(self),
                          engine.HaltableStep.CallEffectActivate(self, 'effect'),
                          engine.HaltableStep.EnableLRARecording(self),
-                         engine.HaltableStep.ProcessMandatoryRespondEvents(self),
                          engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'otherplayer', 'action_name')] + get_spelltrap_resolve_steps(self)
                          
 

@@ -5,9 +5,14 @@ import engine.HaltableStep
 import engine.Player
 from engine.Event import Event
 
+import engine.CardModels.NormalMonsterCardModels as NM
+import engine.CardModels.TrapHole as TH
+
 import copy
 
 from collections import deque
+
+
 
 class Phase:
     def __init__(self, name, funclist):
@@ -25,8 +30,7 @@ class GameState:
         self.duel_id = duel_id
 
         self.zonesByName = {}
-        self.cardsById = {}
-
+        
         self.yugi = engine.Player.Player(0, self)
         self.kaiba = engine.Player.Player(1, self)
 
@@ -38,15 +42,6 @@ class GameState:
         self.turnplayer = self.yugi
         self.otherplayer = self.kaiba
         
-        for card in yugi_deck:
-            self.cardsById[card.ID] = card
-
-        for card in kaiba_deck:
-            self.cardsById[card.ID] = card
-
-        self.yugi.give_deck(yugi_deck)
-        self.kaiba.give_deck(kaiba_deck)
-
         self.normalsummonscounter = 0 #for the current turn
         self.lastaction = ""
 
@@ -160,12 +155,6 @@ class GameState:
 
         self.saved_trigger_events = {'MSS1TP' : [], 'MSS1OP' : [], 'OSS1TP' : [], 'OSS1OP' : [], 'OFastTP' : [], 'OFastOP' : []}
         
-        self.chainable_ss1_respond_events = { 'MSS1TP' : [], 'OSS1TP' : [], 'MSS1OP' : [], 'OSS1OP' : [] }
-        self.chainable_ss1_trigger_events = { 'MSS1TP' : [], 'OSS1TP' : [], 'MSS1OP' : [], 'OSS1OP' : [] }
-
-        self.chainable_optional_fast_respond_events = []
-        self.chainable_optional_fast_trigger_events = []
-
         self.chainable_events = {'respond_MSS1TP' : [], 'respond_MSS1OP' : [], 'respond_OSS1TP' : [], 'respond_OSS1OP' : [],
                                     'respond_OFast' : [],
                                 'trigger_MSS1TP' : [],  'trigger_MSS1OP' : [], 'trigger_OSS1TP' : [], 'trigger_OSS1OP' : [],
@@ -178,8 +167,19 @@ class GameState:
                                     None, "immediate", None, self.MatchAttackConditionChanges)
         self.AttackReplayTrigger.funclist.append(self.SetReplayWasTriggered)
 
-        self.yugi.init_card_actions_and_effects(self)
-        self.kaiba.init_card_actions_and_effects(self)
+        self.cardsById = []
+
+        self.cardcounter = 0
+        
+        for cardmodel in yugi_deck:
+            self.cardsById.append(engine.Cards.generate_card(cardmodel, self, self.cardcounter, self.yugi))
+            self.yugi.add_card_to_deck(self.cardsById[-1])
+            self.cardcounter += 1
+            
+        for cardmodel in kaiba_deck:
+            self.cardsById.append(engine.Cards.generate_card(cardmodel, self, self.cardcounter, self.kaiba))
+            self.kaiba.add_card_to_deck(self.cardsById[-1])
+            self.cardcounter += 1
 
     def startup(self):
         self.has_started = True
@@ -482,25 +482,11 @@ class GameState:
 
 def get_default_gamestate(sio, duel_id):
     
-    medesc0 = "A mystical defensive elf 0"
-    addesc0 = "An attack dragon 0"
-    dmdesc = "The ultimate wizard in terms of attack and defense."
-    ssdesc = "Level 6 example monster"
-
-    mysticalelf0 = engine.Cards.NormalMonsterCard("Mystical Elf", "Light", "Spellcaster", 4, 800, 2000, medesc0, 'kero_chill.png')
-    alexdragon0 = engine.Cards.NormalMonsterCard("Alexandrite Dragon", "Light", "Dragon", 4, 2000, 100, addesc0, 'alexandrite_dragon.jpg')
-    summonedskull0 = engine.Cards.NormalMonsterCard("Summoned Skull", "Dark", "Fiend", 6, 2500, 1200, ssdesc, 'barrel_dragon.png') 
-    darkmagician0 = engine.Cards.NormalMonsterCard("Dark Magician", "Dark", "Spellcaster", 7, 2500, 2000, dmdesc, 'barrel_dragon.png')
-    
-    traphole0 = engine.Cards.TrapCard("Trap Hole", "Dump a monster with 1000 or more ATK", engine.Effect.TrapHoleEffect(), 'trap_hole.jpg')
-
-    yugi_deck = [mysticalelf0, darkmagician0, traphole0]
-    kaiba_deck = ([summonedskull0, alexdragon0])
+    yugi_deck = [NM.MysticalElf, NM.DarkMagician, TH.TrapHole]
+    kaiba_deck = [NM.SummonedSkull, NM.AlexandriteDragon]
 
     theduel = GameState(yugi_deck, kaiba_deck, sio, duel_id)
 
-    #theduelcopy = copy.deepcopy(theduel)
-    #theduelcopy.sio = None #okay, that seems to work
 
     return theduel
 

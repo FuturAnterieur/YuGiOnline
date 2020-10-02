@@ -11,7 +11,7 @@ class Player:
 
         self.player_id = pid
         strpid = str(pid)
-        self.deckzone = self.register_zone(Zones.Zone(strpid + "_Deck", 50, self, "Deck"))
+        self.deckzone = self.register_zone(Zones.Deck(strpid + "_Deck", self))
         self.hand = self.register_zone(Zones.Hand(strpid + "_Hand",  self))
         self.monsterzones = self.register_zone_array(Zones.FieldZoneArray(strpid + "_Monster", self, 5, self.monsters_on_field))
         self.spelltrapzones = self.register_zone_array(Zones.FieldZoneArray(strpid + "_Spelltrap", self, 5, self.spelltraps_on_field)) 
@@ -35,11 +35,8 @@ class Player:
             self.gamestate.zonesByName[zone.name] = zone
         return zoneArray
 
-    def give_deck(self, listofcards):
-        for card in listofcards:
-            card.owner = self
-            card.location = "Deck"
-        self.deckzone.add_cards(listofcards)
+    def add_card_to_deck(self, card):
+        self.deckzone.add_card(card)
 
     def init_card_actions_and_effects(self, gamestate):
         for card in self.deckzone.cards:

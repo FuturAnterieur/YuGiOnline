@@ -1,3 +1,5 @@
+from engine.defs import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE
+
 class Zone:
     def __init__(self, name, cardlimit, owner, ztype, zonenum = 0):
         self.name = name
@@ -33,23 +35,32 @@ class Zone:
 
 class Graveyard(Zone):
     def __init__(self, name, owner):
-        super(Graveyard, self).__init__(name, 65, owner, "Graveyard")
+        super(Graveyard, self).__init__(name, 75, owner, "Graveyard")
 
     def add_card(self, card):
         super(Graveyard, self).add_card(card)
         card.location = "Graveyard"
-        card.face_up = True
+        card.face_up = FACEUPTOEVERYONE
         #card.on_send_to_graveyard()
         #card.on_destroy() just as we can't call card.on_discard() here either
 
 class Banished(Zone):
     def __init__(self, name, owner):
-        super().__init__(name, 65, owner, "Banished")
+        super().__init__(name, 75, owner, "Banished")
 
     def add_card(self, card, face_up):
         super().add_card(card)
         card.location = "Banished"
         card.face_up = face_up
+
+class Deck(Zone):
+    def __init__(self, name, owner):
+        super().__init__(name, 60, owner, "Deck")
+
+    def add_card(self, card):
+        super().add_card(card)
+        card.location = "Deck"
+        card._face_up = FACEDOWN
 
 class FieldZone(Zone):
     def __init__(self, name, owner, zonenum):
@@ -121,11 +132,12 @@ class FieldZoneArray:
 
 class Hand(Zone):
     def __init__(self, name, owner):
-        super(Hand, self).__init__(name, 65, owner, "Hand")
+        super(Hand, self).__init__(name, 75, owner, "Hand")
         
 
     def add_card(self, card):
         super(Hand, self).add_card(card)
         card.location = "Hand"
+        card.face_up = FACEUPTOCONTROLLER
 
 

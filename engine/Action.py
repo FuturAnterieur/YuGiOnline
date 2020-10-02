@@ -1,5 +1,5 @@
 import engine.HaltableStep
-from engine.defs import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT, CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_EVENT, STATE_ACTIVATE, STATE_RESOLVE, CAUSE_BATTLE, CAUSE_CHAIN
+from engine.defs import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT, CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_EVENT, STATE_ACTIVATE, STATE_RESOLVE, CAUSE_BATTLE, CAUSE_CHAIN, CAUSE_TRIBUTE
 
 
 class Action:
@@ -51,7 +51,7 @@ class RunOptionalResponseWindows(Action):
         self.event_type = event_type
 
     def run(self, gamestate):
-        #chainable_optional_respond_events are cleared after each of these steps automatically.
+        #chainable_optional_fast_respond_events are cleared after each of these steps automatically.
         
         step2 = engine.HaltableStep.OpenWindowForResponse(self, 'response_window:' + self.event_type, 'firstplayer', 'FirstplayerUsesRW')
         step3 = engine.HaltableStep.RunStepIfCondition(self, 
@@ -490,18 +490,19 @@ class SummonMonster(Action):
 
 class TributeMonsters(Action):
     
-    def init(self, numtributesrequired, player):
+    def init(self, card):
         super(TributeMonsters, self).init("Tribute Monsters", None)
-        self.player = player
-        self.numtributesrequired = numtributesrequired
-        self.args = {'deciding_player' : self.player, 'target_player' : self.player, 
-                    'destroy_is_contained' : True, 'destroy_type' : CCZDESTROY, 'this_action' : self}
+        self.card = card
+        self.player = card.owner
+        self.args = {'deciding_player' : self.player, 'destroy_is_contained' : True, 'ccz_name' : CCZDESTROY, 
+                        'destroy_cause' : CAUSE_TRIBUTE, 'parent_effect' : None, 'this_action' : self}
         
     def reqs(self, gamestate):
+        self.player = self.card.owner
         if self.check_for_bans(gamestate) == False:
             return False
 
-        if(len(self.player.monsterzones.occupiedzonenums) < self.numtributesrequired):
+        if(len(self.player.monsterzones.occupiedzonenums) < self.card.numtributesrequired):
             return False
         else:
             self.args['possible_tributes'] = self.player.monsters_on_field
@@ -513,10 +514,12 @@ class TributeMonsters(Action):
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self), engine.HaltableStep.ClearLRAIfRecording(self)]
         
         #'Monster' is not an arg from the args dict but a parameter indicating to choose among monster zones
+        
         list_of_steps_for_one_tribute = [engine.HaltableStep.ChooseOccupiedZone(self,'deciding_player', 'possible_tributes', 'chosen_monster'),
-                                         engine.HaltableStep.InitAndRunAction(self, ChangeCardZone, 'destroy_type', 'chosen_monster', 'destroy_is_contained')]
+                                         engine.HaltableStep.InitAndRunAction(self, ChangeCardZone, 'ccz_name', 
+                                                    'chosen_monster', 'destroy_cause', 'parent_effect', 'destroy_is_contained')]
 
-        for i in range(self.numtributesrequired):
+        for i in range(self.card.numtributesrequired):
             list_of_steps.extend(list_of_steps_for_one_tribute)
 
         ending_steps = [engine.HaltableStep.ProcessTriggerEvents(self), engine.HaltableStep.AppendToLRAIfRecording(self), 
@@ -527,10 +530,7 @@ class TributeMonsters(Action):
         
         list_of_steps.extend(ending_steps)
         
-        for i in range(len(list_of_steps) - 1, -1, -1):
-            gamestate.steps_to_do.appendleft(list_of_steps[i])
-        
-        gamestate.run_steps()
+        self.run_steps(gamestate, list_of_steps)
         
 
     run_func = default_run
@@ -546,7 +546,7 @@ class NormalSummonMonster(SummonMonster):
     def init(self, card):
         super().init("Normal Summon Monster", card)
         self.TributeAction = TributeMonsters()
-        self.TributeAction.init(self.card.numtributesrequired, self.card.owner)
+        self.TributeAction.init(self.card)
         self.args = { 'this_action' : self, 'summonedmonster' : card, 'actionplayer' : card.owner, 
                 'otherplayer' : card.owner.other, 'event1' : 'Monster would be summoned'}
 
