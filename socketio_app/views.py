@@ -29,9 +29,6 @@ def index(request):
 
     return render(request, 'socketio_app/index.html', {})
     
-def chat_space(request):
-    return render(request, 'socketio_app/chat_space.html', {})
-
 def create_new_duel(request):
     #create new duel and get its ID
     
