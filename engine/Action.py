@@ -452,6 +452,9 @@ class FlipMonsterFaceUp(Action):
         self.args = {'monster' : card, 'player1' : card.owner, 'player2' : card.owner.other}
 
     def run(self, gamestate):
+        
+        self.args['monster'].face_up = FACEUPTOEVERYONE
+        
         #no ClearLRA because this will always be a sub-action
         list_of_steps = [engine.HaltableStep.ChangeCardVisibility(self, ['player1', 'player2'], 'monster', "1"),
                         engine.HaltableStep.ProcessFlipEvents(self)]
@@ -465,10 +468,7 @@ class FlipMonsterFaceUp(Action):
 
         #so a flip trigger's category is 'if' (either mandatory or optional), but it goes in the gamestate.flip_triggers container.
         
-        for i in range(len(list_of_steps) - 1, -1, -1):
-            gamestate.steps_to_do.appendleft(list_of_steps[i])
-        
-        gamestate.run_steps()
+        self.run_steps(gamestate, list_of_steps)
 
 class Target(Action):
     def init(self, card, list_of_possible_targets, parent_effect = None):
