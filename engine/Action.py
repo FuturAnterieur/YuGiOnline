@@ -1,5 +1,5 @@
 import engine.HaltableStep
-from engine.defs import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT, CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_EVENT, STATE_ACTIVATE, STATE_RESOLVE, CAUSE_BATTLE, CAUSE_CHAIN, CAUSE_TRIBUTE
+from engine.defs import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT, CCZTRIBUTE, CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_PRE_ACTIVATE, STATE_ACTIVATE, STATE_RESOLVE, CAUSE_BATTLE, CAUSE_CHAIN, CAUSE_TRIBUTE
 
 
 class Action:
@@ -51,7 +51,7 @@ class RunOptionalResponseWindows(Action):
         self.event_type = event_type
 
     def run(self, gamestate):
-        #chainable_optional_fast_respond_events are cleared after each of these steps automatically.
+        #in_timing_optional_fast_respond_events are cleared after each of these steps automatically.
         
         step2 = engine.HaltableStep.OpenWindowForResponse(self, 'response_window:' + self.event_type, 'firstplayer', 'FirstplayerUsesRW')
         step3 = engine.HaltableStep.RunStepIfCondition(self, 
@@ -133,28 +133,27 @@ class RunEvents(Action): #this function will always be ran at the end of a chain
 
 
         engine.HaltableStep.refresh_SEGOC_events(gamestate)
-
-        
-        engine.HaltableStep.refresh_chainable_optional_fast_trigger_events(gamestate) 
-        #these won't be put on the SEGOC chain, but they can be chained afterwards
+        engine.HaltableStep.refresh_in_timing_optional_fast_trigger_events(gamestate) 
+        engine.HaltableStep.refresh_in_timing_respond_OFast_LRA(gamestate)
+        #respond_OFast and optional fast triggers won't be put on the SEGOC chain, but they can be chained afterwards
         #(either on top of the SEGOC effects or by starting a chain of their own if no SEGOC chain is formed)
 
         list_of_steps = []
 
         
-        for trigger in gamestate.chainable_events['trigger_MSS1TP'] + gamestate.chainable_events['respond_MSS1TP']:
+        for trigger in gamestate.events_in_timing['trigger_MSS1TP'] + gamestate.events_in_timing['respond_MSS1TP']:
             #if there is more than one trigger in a category and we are building a SEGOC chain, 
             #which we will always be doing since we are at the end of a previous chain, ask the player 
             #who owns the effects how he wants to order them in the chain
             gamestate.triggers_to_run.append(trigger)
 
-        for trigger in gamestate.chainable_events['trigger_MSS1OP'] + gamestate.chainable_events['respond_MSS1OP']: #meme principe pour les autres
+        for trigger in gamestate.events_in_timing['trigger_MSS1OP'] + gamestate.events_in_timing['respond_MSS1OP']: #meme principe pour les autres
             gamestate.triggers_to_run.append(trigger)
 
-        for trigger in gamestate.chainable_events['trigger_OSS1TP'] + gamestate.chainable_events['respond_OSS1TP']:
+        for trigger in gamestate.events_in_timing['trigger_OSS1TP'] + gamestate.events_in_timing['respond_OSS1TP']:
             list_of_steps.extend(self.ask_trigger_steps_util(trigger, 'turnplayer'))
 
-        for trigger in gamestate.chainable_events['trigger_OSS1OP'] + gamestate.chainable_events['respond_OSS1OP']:
+        for trigger in gamestate.events_in_timing['trigger_OSS1OP'] + gamestate.events_in_timing['respond_OSS1OP']:
             list_of_steps.extend(self.ask_trigger_steps_util(trigger, 'otherplayer'))
 
 
@@ -174,13 +173,14 @@ class RunEvents(Action): #this function will always be ran at the end of a chain
         #well, according to how those MandatoryRespondEvents seem to work up to now, at least.
         #I don't know if they can be activated in response to LastResolvedActions too.
 
-        list_of_steps.extend([engine.HaltableStep.ClearSEGOCChainableEvents(self),
+        list_of_steps.extend([engine.HaltableStep.ClearSEGOCInTimingEvents(self),
                                 engine.HaltableStep.ClearSavedTriggerEvents(self),  #we don't need those anymore
                                 engine.HaltableStep.RunStepIfElseCondition(self, 
                                         engine.HaltableStep.LaunchTTR(self),
                                         engine.HaltableStep.InitAndRunAction(self, RunOptionalResponseWindows, 'turnplayer', 'for_what_event'),
                                         TTRNonEmpty),
-                                engine.HaltableStep.ClearChainableOptionalFastTriggerEvents(self)]) 
+                                engine.HaltableStep.ClearInTimingOptionalFastTriggerEvents(self),
+                                engine.HaltableStep.ClearInTimingOptionalFastRespondEventsLRA(self)]) 
                                 #these were built at the start of the current call to RunEvents
                                 #the Clear as an ending step is to clear them at the exit of all the 
                                 #calls to RunEvents that might have happened.
@@ -471,13 +471,22 @@ class FlipMonsterFaceUp(Action):
         self.run_steps(gamestate, list_of_steps)
 
 class Target(Action):
-    def init(self, card, list_of_possible_targets, parent_effect = None):
+    def init(self, card, list_of_possible_targets, parent_effect = None, target_arg_name_for_effect = None):
         super().init('Target', card)
-        self.args = {'player' : self.card.owner, 'possible_targets' : list_of_possible_targets, 'chosen_target' : None}
+        self.args = {'player' : self.card.owner, 'possible_targets' : list_of_possible_targets, 'chosen_target' : None, 'parent_effect' : parent_effect}
         self.parent_effect = parent_effect
+        self.target_arg_name_for_effect = None
+        if self.parent_effect is not None and target_arg_name_for_effect is not None:
+             self.target_arg_name_for_effect = target_arg_name_for_effect
     
     def run(self, gamestate):
-        list_of_steps = [engine.HaltableStep.ChooseOccupiedZone(self, 'player', 'possible_targets', 'chosen_target')]
+        set_effect_step = engine.HaltableStep.DoNothing(self)
+        
+        if self.target_arg_name_for_effect is not None:
+            set_effect_step = engine.HaltableStep.SetArgInEffectToValue(self, 'parent_effect', self.target_arg_name_for_effect, 'chosen_target') 
+
+        list_of_steps = [engine.HaltableStep.ChooseOccupiedZone(self, 'player', 'possible_targets', 'chosen_target'),
+                        set_effect_step]
         list_of_steps.extend(steps_for_event_action(self))
         self.run_steps(gamestate, list_of_steps)
 
@@ -494,7 +503,7 @@ class TributeMonsters(Action):
         super(TributeMonsters, self).init("Tribute Monsters", None)
         self.card = card
         self.player = card.owner
-        self.args = {'deciding_player' : self.player, 'destroy_is_contained' : True, 'ccz_name' : CCZDESTROY, 
+        self.args = {'deciding_player' : self.player, 'destroy_is_contained' : True, 'ccz_name' : CCZTRIBUTE, 
                         'destroy_cause' : CAUSE_TRIBUTE, 'parent_effect' : None, 'this_action' : self}
         
     def reqs(self, gamestate):
@@ -673,8 +682,9 @@ class DeclareAttack(Action):
         list_of_possible_target_monsters = []
         for monster in self.args['target_player'].monsters_on_field:
             compatible = True
-            dummy_attack = DeclareAttack(self.card)
-            dummy_attack['target'] = monster
+            dummy_attack = DeclareAttack()
+            dummy_attack.init(self.card)
+            dummy_attack.args['target'] = monster
 
             unbanned = dummy_attack.check_for_bans(gamestate)
             if unbanned == False:
@@ -785,7 +795,7 @@ class SelectAttackTarget(Action):
                                         DirectAttackChoice, 'direct_attack_answer')])
 
             else:
-                list_of_steps.extend([engine.HaltableStep.ChooseOccupiedZone(self.pdaa, 'Monster', 'player', 'target_player', self.taa)])
+                list_of_steps.extend([engine.HaltableStep.ChooseOccupiedZone(self.pdaa, 'player', 'possible_targets', self.taa)])
 
         for i in range(len(list_of_steps) - 1, -1, -1):
             gamestate.steps_to_do.appendleft(list_of_steps[i])
@@ -999,7 +1009,7 @@ class LaunchDamageStep(Action):
             #a flip effect will work as a mandatory or optional if-effect that triggers at AfterDamageCalculationEvents.
             #Otherwise it could be triggered during the open window following BeforeDamageCalculation.
             #So FlipMonsterFaceUp can be fed immediate triggers that register the monster's flip effect
-            #as having to be added to chainable_optional_respond_events at AfterDamageCalculation.
+            #as having to be added to in_timing_optional_respond_events at AfterDamageCalculation.
             #It's either that or I implement a special gamestate container for flip-effect monsters 
             #having to trigger their flip-effect at the next AfterDamageCalculation.
 
@@ -1113,7 +1123,8 @@ class MonstersMarkedEventsForAll(Action):
 
 class MonsterMarkedEvents(Action):
     def init(self, card):
-        super(MonsterMarkedEvents, self).init(card)
+        super(MonsterMarkedEvents, self).init('Monster determined to be destroyed', card)
+        self.args = {}
 
     def run(self, gamestate):
         los = steps_for_event_action(self, gamestate)

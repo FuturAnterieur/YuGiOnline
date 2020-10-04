@@ -176,14 +176,14 @@ var CardManager = {
     {
 	console.log(prefix + " " + name);
 	this.Zones[prefix][name] = new Zone(prefix, this.perspectiveNo, name, x, y, width, height);
-	console.log(this.Zones[prefix][name].globalName);
+	//console.log(this.Zones[prefix][name].globalName);
     },
 
     getZone : function(zoneId)
     {
 	var zone;
 	var splitzone = zoneId.split("_");
-	console.log(splitzone[1]);
+	//console.log(splitzone[1]);
 	if (splitzone[0] == this.perspectiveNo)
 	{
 	    zone = this.Zones["my"][splitzone[1]];
@@ -249,9 +249,9 @@ var CardManager = {
 	this.clickableZones.splice(0, this.clickableZones.length)
 	for (var i = 0; i < zonename_list.length; i++)
 	{
-		console.log(zonename_list[i]);
+		//console.log(zonename_list[i]);
 		zone = this.getZone(zonename_list[i]);
-		console.log(zone.globalName);
+		//console.log(zone.globalName);
 		this.clickableZones.push(zone);
 	}
 	$('#message').text("Choose a free zone.")
@@ -351,7 +351,7 @@ var CardManager = {
 			{
 			    this.socket.emit("target_card_chosen", {pnum: this.clientNo, duelid: this.duelid, cardid: this.clickedCardId});
 		            this.clickedCardId = "";
-			    this.clickableCardIds.splice(0, this.clickableCardsIds.length);
+			    this.clickableCardIds.splice(0, this.clickableCardIds.length);
 			    this.clickMode = 0;
 			    
 			    break;
@@ -532,7 +532,7 @@ var CardManager = {
 
 		for(var i = 0; i < spliced_position; i++)
 		{
-			this.moveList.push({card: this.cardsInHands[whichHand][spliced_position - i], 
+			this.moveList.push({card: this.cardsInHands[whichHand][spliced_position - i - 1], 
 			       		tl: this.getCardInHandPos(whichHand, newNumCardsInHand, spliced_position - i)});
 		}
 

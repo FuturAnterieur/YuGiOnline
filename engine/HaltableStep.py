@@ -44,6 +44,7 @@ class DisableLRARecording(HaltableStep):
     def run(self, gamestate):
         gamestate.record_LRA = False
 
+
 class ProcessTriggerEvents(HaltableStep): #this step should be run at the end of each action
     
     def run(self, gamestate):
@@ -100,73 +101,113 @@ class ProcessMandatoryRespondEvents(HaltableStep):
             for trigger in triggers_to_run_queue['MFastOP']:
                 gamestate.triggers_to_run.append(trigger)
 
-def refresh_chainable_ss1_respond_events(gamestate):
+
+def clear_in_timing_category(gamestate, category):
+    for event in gamestate.events_in_timing[category]:
+        event.in_timing = False
+
+    gamestate.events_in_timing[category].clear()
+
+def refresh_in_timing_ss1_respond_events(gamestate):
     
-    for trigger in gamestate.respond_events:
-        if trigger.category == "OSS1" or trigger.category == "MSS1": 
-            #a spell speed test would be trivial, since refresh_chainable_ss1 is only called before the building of a SEGOC chain
+    for event in gamestate.respond_events:
+        if event.category == "OSS1" or event.category == "MSS1": 
+            #a spell speed test would be trivial, since refresh_in_timing_ss1 is only called before the building of a SEGOC chain
             #also MSS1 respond events don't really exist but I added them here as a theoretical construct
-            full_category = "respond_" + AppendPlayerToEventCategory(trigger, gamestate)
+            full_category = "respond_" + AppendPlayerToEventCategory(event, gamestate)
             for action in gamestate.lastresolvedactions:
-                if trigger.matches(action, gamestate):
-                    gamestate.chainable_events[full_category].append(trigger)
+                if event.matches(action, gamestate):
+                    gamestate.events_in_timing[full_category].append(event)
+                    event.in_timing = True
 
-def clear_chainable_ss1_respond_events(gamestate):
+def clear_in_timing_ss1_respond_events(gamestate):
     for category in ['respond_' + x for x in ['MSS1TP', 'MSS1OP', 'OSS1TP', 'OSS1OP']]:
-            gamestate.chainable_events[category].clear()
+        clear_in_timing_category(gamestate, category)
+            
 
-def refresh_chainable_ss1_trigger_events(gamestate):
+def refresh_in_timing_ss1_trigger_events(gamestate):
     for category in ['OSS1TP', 'OSS1OP', 'MSS1TP', 'MSS1OP']:
         for event in gamestate.saved_trigger_events[category]:
-            gamestate.chainable_events['trigger_' + category].append(event)
+            gamestate.events_in_timing['trigger_' + category].append(event)
+            event.in_timing = True
 
 
-def clear_chainable_ss1_trigger_events(gamestate):
+def clear_in_timing_ss1_trigger_events(gamestate):
     for category in ['trigger_' + x for x in ['MSS1TP', 'MSS1OP', 'OSS1TP', 'OSS1OP']]:
-        gamestate.chainable_events[category].clear()
+        clear_in_timing_category(gamestate, category)
 
 def refresh_SEGOC_events(gamestate):
-    refresh_chainable_ss1_respond_events(gamestate)
-    refresh_chainable_ss1_trigger_events(gamestate)
+    refresh_in_timing_ss1_respond_events(gamestate)
+    refresh_in_timing_ss1_trigger_events(gamestate)
 
-def refresh_chainable_optional_fast_respond_events(gamestate): 
-    #this is called at each response window during the building of a chain
+def refresh_in_timing_optional_fast_respond_events(gamestate): 
     
-    clear_chainable_optional_fast_respond_events(gamestate)
+    #this version is not used anymore. It would only be useful in a situation
+    #where respond_events could be updated during the building of a chain
+
+    clear_in_timing_optional_fast_respond_events(gamestate)
     #they are also cleared at the closing of the response windows
 
-    for trigger in gamestate.respond_events:
-        if trigger.category == "OFast" and trigger.is_spell_speed_sufficient(gamestate): 
-            #the spell speed condition will also be checked in the 
-            #activate effect action's reqs, so it is somehow redundant here
-            #but that way, we are sure that no non-chainable event goes in the chainable_events container.
+    for event in gamestate.respond_events:
+        if event.category == "OFast": 
+            #the spell speed and targeting eligibility conditions will be checked in the 
+            #event's effect's reqs
             for action in gamestate.lastresolvedactions:
-                if trigger.matches(action, gamestate):
-                    gamestate.chainable_events["respond_OFast"].append(trigger)
+                if event.matches(action, gamestate):
+                    gamestate.events_in_timing["respond_OFast_LRA"].append(event)
+                    event.in_timing = True
 
             if len(gamestate.chainlinks) > 0:
-                if trigger.matches(gamestate.chainlinks[-1], gamestate):
-                    gamestate.chainable_events["respond_OFast"].append(trigger)
+                if event.matches(gamestate.chainlinks[-1], gamestate):
+                    gamestate.events_in_timing["respond_OFast_CL"].append(event)
+                    event.in_timing = True
         
-def clear_chainable_optional_fast_respond_events(gamestate):
-    gamestate.chainable_events["respond_OFast"].clear()
+def clear_in_timing_optional_fast_respond_events(gamestate):
+    for event in gamestate.events_in_timing["respond_OFast_LRA"] + gamestate.events_in_timing["respond_OFast_CL"]:
+        event.in_timing = False
+    gamestate.events_in_timing["respond_OFast_LRA"].clear()
+    gamestate.events_in_timing["respond_OFast_CL"].clear()
 
-    #for category in gamestate.chainable_optional_fast_respond_events.keys():
-    #    gamestate.chainable_optional_fast_respond_events[category].clear()
+def refresh_in_timing_respond_OFast_LRA(gamestate):
 
-def refresh_chainable_optional_fast_trigger_events(gamestate):
-    clear_chainable_optional_fast_trigger_events(gamestate)
+    clear_in_timing_respond_OFast_LRA(gamestate)
+    for event in gamestate.respond_events:
+        if event.category == "OFast": 
+            #the spell speed and targeting eligibility conditions will be checked in the 
+            #event's effect's reqs
+            for action in gamestate.lastresolvedactions:
+                if event.matches(action, gamestate):
+                    gamestate.events_in_timing["respond_OFast_LRA"].append(event)
+                    event.in_timing = True
+
+def refresh_in_timing_respond_OFast_CL(gamestate):
+
+    clear_in_timing_respond_OFast_CL(gamestate)
+    for event in gamestate.respond_events:
+        if event.category == "OFast": 
+            if len(gamestate.chainlinks) > 0:
+                if event.matches(gamestate.chainlinks[-1], gamestate):
+                    gamestate.events_in_timing["respond_OFast_CL"].append(event)
+                    event.in_timing = True
+
+def clear_in_timing_respond_OFast_LRA(gamestate):
+    clear_in_timing_category(gamestate, "respond_OFast_LRA")
+
+def clear_in_timing_respond_OFast_CL(gamestate):
+    clear_in_timing_category(gamestate, "respond_OFast_CL")
+
+
+def refresh_in_timing_optional_fast_trigger_events(gamestate):
+    clear_in_timing_optional_fast_trigger_events(gamestate)
     #it's important to clear them beforehand so that the optional fast trigger events 
-    #that were chainable in the previous chain are not chainable in the new one.
+    #that were in_timing in the previous chain are not in_timing in the new one.
     for category in ['OFastTP', 'OFastOP']:
         for event in gamestate.saved_trigger_events[category]:
-            gamestate.chainable_events["trigger_OFast"].append(event)
+            gamestate.events_in_timing["trigger_OFast"].append(event)
+            event.in_timing = True
 
-def clear_chainable_optional_fast_trigger_events(gamestate):
-    gamestate.chainable_events["trigger_OFast"].clear()
-   # for category in gamestate.chainable_optional_fast_trigger_events.keys():
-    #    gamestate.chainable_optional_fast_trigger_events[category].clear()
-
+def clear_in_timing_optional_fast_trigger_events(gamestate):
+    clear_in_timing_category(gamestate, "trigger_OFast")
 
 
 class ClearSavedTriggerEvents(HaltableStep):
@@ -174,14 +215,18 @@ class ClearSavedTriggerEvents(HaltableStep):
         for category in gamestate.saved_trigger_events.keys():
             gamestate.saved_trigger_events[category].clear()
         
-class ClearSEGOCChainableEvents(HaltableStep):
+class ClearSEGOCInTimingEvents(HaltableStep):
     def run(self, gamestate):
-        clear_chainable_ss1_trigger_events(gamestate)
-        clear_chainable_ss1_respond_events(gamestate)
+        clear_in_timing_ss1_trigger_events(gamestate)
+        clear_in_timing_ss1_respond_events(gamestate)
 
-class ClearChainableOptionalFastTriggerEvents(HaltableStep):
+class ClearInTimingOptionalFastTriggerEvents(HaltableStep):
     def run(self, gamestate):
-        clear_chainable_optional_fast_trigger_events(gamestate)
+        clear_in_timing_optional_fast_trigger_events(gamestate)
+
+class ClearInTimingOptionalFastRespondEventsLRA(HaltableStep):
+    def run(self, gamestate):
+        clear_in_timing_respond_OFast_LRA(gamestate)
 
 #On the other hand, Immediate triggers can be ran even while a chain is resolving.
 #They are mostly there for OnLeaveField triggers of continuous spell and trap cards,
@@ -264,12 +309,23 @@ class RunStepIfElseCondition(HaltableStep):
 
 class SetArgToValue(HaltableStep):
     def __init__(self, pA, arg_arg_name, value_arg_name):
-        super(SetArgToValue, self).__init__(pA)
+        super().__init__(pA)
         self.aan = arg_arg_name
         self.van = value_arg_name
 
     def run(self, gamestate):
         self.args[self.aan] = self.args[self.van]
+
+class SetArgInEffectToValue(HaltableStep):
+    def __init__(self, pA, effect_arg_name, arg_arg_name, value_arg_name):
+        super().__init__(pA)
+        self.ean = effect_arg_name
+        self.aan = arg_arg_name
+        self.van = value_arg_name
+
+    def run(self, gamestate):
+        effect = self.args[self.ean]
+        effect.args[self.aan] = self.args[self.van]
 
 class DestroyCardServer(HaltableStep):
     def __init__(self, pA, destroyedcard_arg_name):
@@ -436,9 +492,9 @@ class PerformDamageCalculation(HaltableStep):
                     gamestate.monsters_to_be_destroyed_by_battle.append(losermonster)
 
                 if losermonster.position == "ATK":
-                    losermonster.owner.add_life_points(gamestate, -1*math.fabs(difference))
+                    losermonster.owner.add_life_points(gamestate, -1*abs(difference))
                     self.args[self.lan] = losermonster.owner
-                    self.args[self.aan] = -1*math.fabs(difference)
+                    self.args[self.aan] = -1*abs(difference)
             
 
 class SetAttackDeclaredActionToNone(HaltableStep):
@@ -669,7 +725,7 @@ class OpenWindowForResponse(HaltableStep):
         waiting_player = responding_player.other
 
         #check if responding player can play something first
-        refresh_chainable_optional_fast_respond_events(gamestate)
+        refresh_in_timing_respond_OFast_CL(gamestate)
 
         possible_cards, choices_per_card = gamestate.get_available_choices(responding_player)
         
@@ -697,8 +753,8 @@ class SetMultipleActionWindow(HaltableStep):
         self.current_phase_or_step = current_phase_or_step
     
     def run(self, gamestate):
-        #Note that refresh_chainable_optional_respond_events is not run here 
-        #(and a refresh is always followed by a clearing of the chainable triggers container once the window closes),
+        #Note that refresh_in_timing_optional_respond_events is not run here 
+        #(and a refresh is always followed by a clearing of the in_timing triggers container once the window closes),
         #so when-triggers can only be ran in a response window,
         #and not from an open game state (represented by the SetMutltipleActionWindow step).
 

@@ -155,8 +155,8 @@ class GameState:
 
         self.saved_trigger_events = {'MSS1TP' : [], 'MSS1OP' : [], 'OSS1TP' : [], 'OSS1OP' : [], 'OFastTP' : [], 'OFastOP' : []}
         
-        self.chainable_events = {'respond_MSS1TP' : [], 'respond_MSS1OP' : [], 'respond_OSS1TP' : [], 'respond_OSS1OP' : [],
-                                    'respond_OFast' : [],
+        self.events_in_timing = {'respond_MSS1TP' : [], 'respond_MSS1OP' : [], 'respond_OSS1TP' : [], 'respond_OSS1OP' : [],
+                                    'respond_OFast_LRA' : [], 'respond_OFast_CL' : [],
                                 'trigger_MSS1TP' : [],  'trigger_MSS1OP' : [], 'trigger_OSS1TP' : [], 'trigger_OSS1OP' : [],
                                 'trigger_OFast' : []}
 
@@ -283,7 +283,7 @@ class GameState:
     def run_action_asked_for(self, cardId, action_name):
         if (self.player_to_stop_waiting_when_run_action is not None):
 
-            engine.HaltableStep.clear_chainable_optional_fast_respond_events(self)
+            engine.HaltableStep.clear_in_timing_respond_OFast_CL(self)
 
             waiting_player = self.player_to_stop_waiting_when_run_action
             self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
@@ -311,7 +311,7 @@ class GameState:
             waiting_player = responding_player.other
             
             if (answer == "No"):
-                engine.HaltableStep.clear_chainable_optional_fast_respond_events(self)
+                engine.HaltableStep.clear_in_timing_respond_OFast_CL(self)
 
                 self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
                 
@@ -482,8 +482,11 @@ class GameState:
 
 def get_default_gamestate(sio, duel_id):
     
-    yugi_deck = [NM.MysticalElf, NM.DarkMagician, TH.TrapHole]
-    kaiba_deck = [NM.SummonedSkull, NM.AlexandriteDragon]
+    #yugi_deck = [NM.DarkMagician, NM.MysticalElf, TH.TrapHole]
+    #kaiba_deck = [NM.MysticalElf, NM.SummonedSkull, NM.AlexandriteDragon]
+
+    yugi_deck = [NM.DarkMagician, TH.TrapHole, NM.MysticalElf]
+    kaiba_deck = [NM.MysticalElf, NM.SummonedSkull, NM.AlexandriteDragon]
 
     theduel = GameState(yugi_deck, kaiba_deck, sio, duel_id)
 

@@ -4,7 +4,7 @@ import engine.Action
 from engine.Event import Event
 import engine.Bans
 
-from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_EVENT, STATE_ACTIVATE, STATE_RESOLVE, CAUSE_EFFECT
+from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_PRE_ACTIVATE, STATE_ACTIVATE, STATE_RESOLVE, CAUSE_EFFECT
 
 
 class TrapHoleEffect(Effect):
@@ -13,11 +13,12 @@ class TrapHoleEffect(Effect):
         
     def init(self, gamestate, card):
         super().init(card)
-        self.was_negated = False
+        self.is_negated = False
         self.spellspeed = 2
         self.SummonedMonster = None
 
-        self.potential_targets = []
+        self.potential_target = None
+        self.args = {'target' : None}
 
         self.effect_event = Event("TrapHoleEvent", self.parent_card, self, "respond", "OFast", self.MatchOnTHCompatibleSummon)
         self.effect_event.funclist.append(self.LaunchNormalTrapActivationForTH)
@@ -51,15 +52,8 @@ class TrapHoleEffect(Effect):
     def MatchOnTHCompatibleSummon(self, action, gamestate):
         result = False
         if action.name == "Normal Summon Monster" and action.card.face_up == True and action.card.attack >= 1000:
-
-            #do the check for the Activate's Target action too
-            print("MatchOnTHCompatible found valid target. Checking immunities...")
-            HypotheticalDestroyAction = engine.Action.ChangeCardZone()
-            HypotheticalDestroyAction.init(engine.Action.CCZDESTROY, action.card, False, self)
-            if HypotheticalDestroyAction.check_for_bans_and_immunities(action.card, gamestate, STATE_EVENT):
-                print("Immunity test passed. Target is valid.")
-                result = True
-                self.potential_targets.append(action.card)
+            self.potential_target = action.card
+            result = True
 
         return result
 
@@ -67,9 +61,20 @@ class TrapHoleEffect(Effect):
         self.card.actiondict["Activate"].run(gamestate)
 
     def reqs(self, gamestate):
-        #Trap card immunity as well as Targeting/Destroying bans are implemented in the MatchOnTHCompatibleSummon function
 
-        return self.effect_event.is_in_chainable_events(gamestate)
+        if not self.effect_event.in_timing:
+            return False
+
+        result = False
+        #do the check for the Activate's Target action too
+        print("MatchOnTHCompatible found valid target. Checking immunities...")
+        HypotheticalDestroyAction = engine.Action.ChangeCardZone()
+        HypotheticalDestroyAction.init(engine.Action.CCZDESTROY, self.potential_target, False, self)
+        if HypotheticalDestroyAction.check_for_bans_and_immunities(self.potential_target, gamestate, STATE_PRE_ACTIVATE):
+            print("Immunity test passed. Target is valid.")
+            result = True
+
+        return result
 
         #Trap Hole actually works through the summon response window (but not the summon negation window) 
         #AND the summon response window will work through lastresolvedactions 
@@ -81,17 +86,16 @@ class TrapHoleEffect(Effect):
         #Actually, according to the card text, only one target is possible (if another monster is summoned,
         #the first one misses the timing, I think).  
 
-        self.TargetedMonster = self.potential_targets[0]
-        self.potential_targets.clear()
+        self.args['target'] = self.potential_target
         
     def Resolve(self, gamestate):
         if self.TargetedMonster is not None:
             self.current_state_for_checks = STATE_RESOLVE
 
             DestroyAction = engine.Action.ChangeCardZone()
-            DestroyAction.init(engine.Action.CCZDESTROY, self.TargetedMonster, CAUSE_EFFECT, self, False, True)
+            DestroyAction.init(engine.Action.CCZDESTROY, self.args['target'], CAUSE_EFFECT, self, False, True)
         
-            if DestroyAction.check_for_bans_and_immunities(self.TargetedMonster, gamestate, STATE_RESOLVE):
+            if DestroyAction.check_for_bans_and_immunities(self.args['target'], gamestate, STATE_RESOLVE):
                 DestroyAction.run(gamestate)
 
 

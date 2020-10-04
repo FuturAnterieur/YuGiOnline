@@ -3,7 +3,7 @@ import engine.Action
 from engine.Event import Event
 import engine.Bans
 
-from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_EVENT, STATE_ACTIVATE, STATE_RESOLVE, CAUSE_EFFECT
+from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_PRE_ACTIVATE, STATE_ACTIVATE, STATE_RESOLVE, CAUSE_EFFECT
 
 class Effect:
     def __init__(self, name, etype):

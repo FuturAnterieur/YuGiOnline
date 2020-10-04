@@ -16,6 +16,7 @@ class Event:
         self.matches = matches
         self.funclist = []
         self.effect = effect
+        self.in_timing = False
 
     def execute(self, gamestate):
         for func in self.funclist:
@@ -29,9 +30,11 @@ class Event:
         elif gamestate.curspellspeed > 1:
             return self.effect.spellspeed >= gamestate.curspellspeed
 
-    def is_in_chainable_events(self, gamestate):
+    def is_in_timing_events(self, gamestate):
         #as things stand now, this will only be called in the case where the category is OFast,
         #but I provided functionality for the other categories
+
+        #and anyway, it has been superseded by the in_timing flag
         full_category = ""
         if self.category == "OFast":
             full_category = self.type + "_" + self.category
@@ -40,7 +43,7 @@ class Event:
             full_category = self.type + "_" + self.category + GetEventCurrentPlayer(self, gamestate)
 
         if full_category != "":
-            return self in gamestate.chainable_events[full_category]
+            return self in gamestate.events_in_timing[full_category]
 
         else: #MFast : won't be used either
             return True
