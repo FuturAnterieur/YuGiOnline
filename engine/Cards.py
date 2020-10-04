@@ -43,9 +43,6 @@ class Card:
     def give_current_choices(self):
         return self.curchoices
 
-    def clear_current_choices(self):
-        self.curchoices.clear()
-
 
 class MonsterCard(Card):
     def __init__(self, name, attr, mtype, level, attack, defense, text, monsterclass, effects_classes, imgpath, ID, owner, gamestate):

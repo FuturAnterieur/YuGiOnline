@@ -293,7 +293,7 @@ class GameState:
 
         #self.lastresolvedactions.clear() #i don't think this is appropriate here
         #if it would stay here, activating a new chain link could remove the LRA at the base of the chain
-        self.clear_card_choices()
+        
         card = self.cardsById[cardId]
         action = card.actiondict[action_name]
         action.run(self)
@@ -313,7 +313,7 @@ class GameState:
             if (answer == "No"):
                 engine.HaltableStep.clear_in_timing_respond_OFast_CL(self)
                 
-                self.clear_card_choices()
+                
                 self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
                 
                 self.keep_running_steps = True
@@ -416,12 +416,6 @@ class GameState:
         self.cur_card_choices = card_choices
 
         return choices, choicesforcards
-
-    def clear_card_choices(self):
-        for card in self.cur_card_choices:
-            card.clear_current_choices()
-
-        self.cur_card_choices.clear()
         
     def add_ban(self, ban):
         self.bans.append(ban)
