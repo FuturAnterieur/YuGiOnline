@@ -89,7 +89,7 @@ class TrapHoleEffect(Effect):
         self.args['target'] = self.potential_target
         
     def Resolve(self, gamestate):
-        if self.TargetedMonster is not None:
+        if self.args['target'] is not None:
             self.current_state_for_checks = STATE_RESOLVE
 
             DestroyAction = engine.Action.ChangeCardZone()

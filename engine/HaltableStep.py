@@ -760,8 +760,9 @@ class SetMultipleActionWindow(HaltableStep):
 
         gamestate.lastresolvedactions.clear() #I think I can put this here
         
-        gamestate.player_in_multiple_action_window = self.controlling_player
+        possible_cards, choices_per_card = gamestate.get_available_choices(self.controlling_player)
 
+        gamestate.player_in_multiple_action_window = self.controlling_player
         waiting_player = self.controlling_player.other
 
         gamestate.sio.emit('start_waiting', {'reason' : self.current_phase_or_step},

@@ -278,7 +278,7 @@ class GameState:
 
     def return_available_action_names(self, cardId):
         card = self.cardsById[cardId]
-        return list(card.give_current_choices(self)) 
+        return list(card.give_current_choices()) 
 
     def run_action_asked_for(self, cardId, action_name):
         if (self.player_to_stop_waiting_when_run_action is not None):
@@ -293,7 +293,7 @@ class GameState:
 
         #self.lastresolvedactions.clear() #i don't think this is appropriate here
         #if it would stay here, activating a new chain link could remove the LRA at the base of the chain
-
+        self.clear_card_choices()
         card = self.cardsById[cardId]
         action = card.actiondict[action_name]
         action.run(self)
@@ -312,7 +312,8 @@ class GameState:
             
             if (answer == "No"):
                 engine.HaltableStep.clear_in_timing_respond_OFast_CL(self)
-
+                
+                self.clear_card_choices()
                 self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
                 
                 self.keep_running_steps = True
@@ -365,11 +366,13 @@ class GameState:
         counter = 0
         choices = {}
         choicesforcards = {}
+        card_choices = []
         for handcard in player.hand.cards:
             index = "hand" + str(counter)
-            choicesforcards[index] = handcard.give_current_choices(self)
+            choicesforcards[index] = handcard.refresh_and_give_current_choices(self)
             if len(choicesforcards[index]) > 0:
                 choices[index] = handcard
+                card_choices.append(handcard)
             counter += 1
 
         counter = 0
@@ -377,9 +380,10 @@ class GameState:
             index = "monster" + str(counter)
             if counter in player.monsterzones.occupiedzonenums:
                 monstercard = monsterzone.cards[0]
-                choicesforcards[index] = monstercard.give_current_choices(self)
+                choicesforcards[index] = monstercard.refresh_and_give_current_choices(self)
                 if len(choicesforcards[index]) > 0:
                     choices[index] = monstercard
+                    card_choices.append(monstercard)
             counter += 1
 
         counter = 0
@@ -388,17 +392,19 @@ class GameState:
             if counter in player.spelltrapzones.occupiedzonenums:
                 magiccard = magiczone.cards[0]
                 #some continuous spell/trap cards have activatable effects
-                choicesforcards[index] = magiccard.give_current_choices(self)
+                choicesforcards[index] = magiccard.refresh_and_give_current_choices(self)
                 if len(choicesforcards[index]) > 0:
                     choices[index] = magiccard
+                    card_choices.append(magiccard)
             counter += 1
 
         counter = 0
         for gycard in player.graveyard.cards:
             index = "GY" + str(counter)
-            choicesforcards[index] = gycard.give_current_choices(self)
+            choicesforcards[index] = gycard.refresh_and_give_current_choices(self)
             if len(choicesforcards[index]) > 0:
                 choices[index] = gycard
+                card_choices.append(gycard)
             counter += 1
     
         for i, card in choices.items():
@@ -407,7 +413,15 @@ class GameState:
             else:
                 print(i + " : " + card.name)
 
+        self.cur_card_choices = card_choices
+
         return choices, choicesforcards
+
+    def clear_card_choices(self):
+        for card in self.cur_card_choices:
+            card.clear_current_choices()
+
+        self.cur_card_choices.clear()
         
     def add_ban(self, ban):
         self.bans.append(ban)
@@ -485,7 +499,7 @@ def get_default_gamestate(sio, duel_id):
     #yugi_deck = [NM.DarkMagician, NM.MysticalElf, TH.TrapHole]
     #kaiba_deck = [NM.MysticalElf, NM.SummonedSkull, NM.AlexandriteDragon]
 
-    yugi_deck = [NM.DarkMagician, TH.TrapHole, NM.MysticalElf]
+    yugi_deck = [NM.DarkMagician, NM.MysticalElf, TH.TrapHole]
     kaiba_deck = [NM.MysticalElf, NM.SummonedSkull, NM.AlexandriteDragon]
 
     theduel = GameState(yugi_deck, kaiba_deck, sio, duel_id)

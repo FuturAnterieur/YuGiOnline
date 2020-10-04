@@ -32,7 +32,7 @@ class Card:
         self.actiondict = {}
         self.curchoices = set()
 
-    def give_current_choices(self, gamestate):
+    def refresh_and_give_current_choices(self, gamestate):
         self.curchoices.clear()
         for action_name in self.actiondict.keys():
             if self.actiondict[action_name].reqs(gamestate):
@@ -40,7 +40,11 @@ class Card:
 
         return self.curchoices
 
+    def give_current_choices(self):
+        return self.curchoices
 
+    def clear_current_choices(self):
+        self.curchoices.clear()
 
 
 class MonsterCard(Card):
