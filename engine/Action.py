@@ -213,10 +213,7 @@ class RunMAWsAtEnd(Action):
         if gamestate.player_in_multiple_action_window == gamestate.otherplayer:
             list_of_steps.append(engine.HaltableStep.SetMultipleActionWindow(gamestate.otherplayer, gamestate.curphase))
         
-        for i in range(len(list_of_steps) - 1, -1, -1):
-            gamestate.steps_to_do.appendleft(list_of_steps[i])
-
-        gamestate.run_steps()
+        self.run_steps(gamestate, list_of_steps)
 
 class DrawCard(Action):
     
@@ -868,6 +865,8 @@ class AttackTargetingReplay(Action):
         choices = ['CancelAttack', 'SelectTarget'] if is_attack_still_possible else ['CancelAttack']
 
         gamestate.immediate_events.append(gamestate.AttackReplayTrigger)
+
+        
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                         engine.HaltableStep.ClearLRAIfRecording(self),
                         engine.HaltableStep.AskQuestion(self, 'player', "replay_action_choice", choices, 'rac_answer'),
@@ -929,7 +928,14 @@ This first condition can be dealt with with immediate triggers. But according to
 
 These two conditions need the change to be permanent to actually cause the replay to happen, and cannot be dealt with with immediate triggers.
 
+In BattleStepBranchOut we also evaluate if the attacker can still attack. If he can't, we reset the battle step.
+
 """
+
+def AttackerStillOnFieldInAttackPosition(gamestate, args):
+    attacker = gamestate.attack_declared_action.card
+    return attacker.location == "Field" and attacker.position == "ATK"
+
 class BattleStepBranchOut(Action):
     def run(self, gamestate):
         self.args = {}
@@ -940,10 +946,21 @@ class BattleStepBranchOut(Action):
         if gamestate.attack_declared == True:
             self.args['ad_action'] = gamestate.attack_declared_action
             
-            list_of_steps.append(engine.HaltableStep.RunStepIfElseCondition(self, 
-                            engine.HaltableStep.InitAndRunAction(self, AttackTargetingReplay, 'ad_action'),
-                            engine.HaltableStep.InitAndRunAction(self, LaunchDamageStep, 'ad_action'), 
-                            AttackTargetingReplayCondition))
+            
+
+            if AttackerStillOnFieldInAttackPosition(gamestate, self.args):
+                if AttackTargetingReplayCondition(gamestate, self.args):
+                    list_of_steps.append(engine.HaltableStep.InitAndRunAction(self, AttackTargetingReplay, 'ad_action'))
+                
+                else:
+                    list_of_steps.append(engine.HaltableStep.InitAndRunAction(self, LaunchDamageStep, 'ad_action'))
+
+                
+            else:
+                list_of_steps.extend([engine.HaltableStep.CancelAttackInGamestate(self),
+                                      engine.HaltableStep.SetMultipleActionWindow(gamestate.turnplayer, 'battle_phase_battle_step'),
+                                        engine.HaltableStep.SetMultipleActionWindow(gamestate.otherplayer, 'battle_phase_battle_step'), 
+                                        engine.HaltableStep.RunAction(self, engine.Action.BattleStepBranchOut())])                                       
 
         else:
             list_of_steps.append(engine.HaltableStep.RunAction(self, LaunchEndStep()))
@@ -952,6 +969,17 @@ class BattleStepBranchOut(Action):
                 gamestate.steps_to_do.appendleft(list_of_steps[i])
         
         gamestate.run_steps()
+
+
+class RunMAWsForAttackMadeImpossible(Action):
+    def run(self, gamestate):
+        list_of_steps = [engine.HaltableStep.CancelAttackInGamestate(self),
+                        engine.HaltableStep.SetMultipleActionWindow(gamestate.turnplayer, 'battle_phase_battle_step'),
+                        engine.HaltableStep.SetMultipleActionWindow(gamestate.otherplayer, 'battle_phase_battle_step'),
+                        engine.HaltableStep.RunAction(self, LaunchEndStep())]
+
+        self.run_steps(gamestate, list_of_steps)
+
 
 def TargetIsMonsterAndIsFaceDown(gamestate, args, target_arg_name):
     target = args[target_arg_name]
