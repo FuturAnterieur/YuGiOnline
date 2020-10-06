@@ -4,7 +4,7 @@ import engine.Action
 from engine.Event import Event
 import engine.Bans
 
-from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_PRE_ACTIVATE, STATE_ACTIVATE, STATE_RESOLVE, CAUSE_EFFECT
+from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, CAUSE_EFFECT
 
 
 class TrapHoleEffect(Effect):
@@ -13,7 +13,6 @@ class TrapHoleEffect(Effect):
         
     def init(self, gamestate, card):
         super().init(card)
-        self.is_negated = False
         self.spellspeed = 2
         self.SummonedMonster = None
 
@@ -70,7 +69,7 @@ class TrapHoleEffect(Effect):
         print("MatchOnTHCompatible found valid target. Checking immunities...")
         HypotheticalDestroyAction = engine.Action.ChangeCardZone()
         HypotheticalDestroyAction.init(engine.Action.CCZDESTROY, self.potential_target, False, self)
-        if HypotheticalDestroyAction.check_for_bans_and_immunities(self.potential_target, gamestate, STATE_PRE_ACTIVATE):
+        if HypotheticalDestroyAction.check_for_bans_and_immunities(self.potential_target, gamestate):
             print("Immunity test passed. Target is valid.")
             result = True
 
@@ -89,13 +88,13 @@ class TrapHoleEffect(Effect):
         self.args['target'] = self.potential_target
         
     def Resolve(self, gamestate):
-        if self.args['target'] is not None:
-            self.current_state_for_checks = STATE_RESOLVE
-
+        #effects that negate other effects (negating the effect, and not the activation) don't prevent them from activating
+        if not self.is_negated.get_value(gamestate) and self.args['target'] is not None:
+            
             DestroyAction = engine.Action.ChangeCardZone()
             DestroyAction.init(engine.Action.CCZDESTROY, self.args['target'], CAUSE_EFFECT, self, False, True)
         
-            if DestroyAction.check_for_bans_and_immunities(self.args['target'], gamestate, STATE_RESOLVE):
+            if DestroyAction.check_for_bans_and_immunities(self.args['target'], gamestate):
                 DestroyAction.run(gamestate)
 
 

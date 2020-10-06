@@ -1,5 +1,5 @@
 import engine.HaltableStep
-from engine.defs import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT, CCZTRIBUTE, CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_PRE_ACTIVATE, STATE_ACTIVATE, STATE_RESOLVE, CAUSE_BATTLE, CAUSE_CHAIN, CAUSE_TRIBUTE
+from engine.defs import FACEDOWN, FACEUPTOCONTROLLER, FACEUPTOEVERYONE, FACEUPTOOPPONENT, CCZTRIBUTE, CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, CAUSE_BATTLE, CAUSE_CHAIN, CAUSE_TRIBUTE
 
 
 class Action:
@@ -11,26 +11,26 @@ class Action:
             self.player = card.owner
         self.was_negated = False
         
-    def check_for_bans(self, gamestate, effect_state = STATE_NOTINEFFECT):
+    def check_for_bans(self, gamestate):
         unbanned = True
         for ban in gamestate.bans:
-            if ban.bans_action(self, gamestate, effect_state):
+            if ban.bans_action(self, gamestate):
                 unbanned = False
                 break
 
         return unbanned
 
-    def check_for_immunities(self, card, effect_state = STATE_NOTINEFFECT):
+    def check_for_immunities(self, card):
         compatible = True
         for effect in card.effects:
-            if effect.blocks_action(self, effect_state):
+            if effect.blocks_action(self):
                 compatible = False
                 break
 
         return compatible
 
-    def check_for_bans_and_immunities(self, card, gamestate, effect_state = STATE_NOTINEFFECT):
-        return self.check_for_bans(gamestate, effect_state) and self.check_for_immunities(card, effect_state) 
+    def check_for_bans_and_immunities(self, card, gamestate):
+        return self.check_for_bans(gamestate) and self.check_for_immunities(card) 
 
     def run(self, gamestate):  #I'll have to do the same for reqs
         self.__class__.run_func(self, gamestate)
@@ -344,7 +344,7 @@ class  TurnOffPassiveEffects(Action):
 
 #attempt to merge Destroy, Banish, Discard and Return To Hand in a single, at-run-time modifiable action
 
-def EraseIfGYOrBanished(gamestate, args, tozone_arg_name):
+def DestinationIsGYOrBanished(gamestate, args, tozone_arg_name):
     tozone = args[tozone_arg_name]
     return tozone.type == "Graveyard" or tozone.type == "Banished"
 
@@ -364,7 +364,7 @@ class ChangeCardZone(Action):
 
         self.intended_action = name
         self.intended_tozone = tozone    
-        self.args = {'card' : card, 'fromzone' : card.zone, 'tozone' : tozone, 'this_action' : self}
+        self.args = {'card' : card, 'fromzone' : card.zone, 'tozone' : tozone, 'this_action' : self, 'owner' : card.owner, 'other' : card.owner.other}
         self.is_contained = is_contained
         self.with_leave_zone_trigger = with_leave_zone_trigger
         self.parent_effect = parent_effect
@@ -381,10 +381,13 @@ class ChangeCardZone(Action):
                             engine.HaltableStep.InitAndRunAction(self, TurnOffPassiveEffects, 'card', 'fromzone'),
                              engine.HaltableStep.InitAndRunAction(self, ApplyBansForChangeCardZone, 'card', 'this_action'),
                             #for deactivating cards when they leave the field, mostly
+                            engine.HaltableStep.RunStepIfCondition(self, 
+                                    engine.HaltableStep.ChangeCardVisibility(self, ['owner', 'other'], 'card', "1"),
+                                    DestinationIsGYOrBanished, 'tozone'),
                             engine.HaltableStep.MoveCard(self, 'card', 'tozone'),
                             engine.HaltableStep.RunStepIfCondition(self, 
                                     engine.HaltableStep.EraseCard(self, 'card'),
-                                    EraseIfGYOrBanished, 'tozone'),
+                                    DestinationIsGYOrBanished, 'tozone'),
                             engine.HaltableStep.ChangeCardZoneServer(self, 'card', 'tozone'),
                             lzt_step,
                             engine.HaltableStep.InitAndRunAction(self, CardSentToZoneEvents, 'card', 'tozone'),
@@ -484,7 +487,7 @@ class Target(Action):
 
         list_of_steps = [engine.HaltableStep.ChooseOccupiedZone(self, 'player', 'possible_targets', 'chosen_target'),
                         set_effect_step]
-        list_of_steps.extend(steps_for_event_action(self))
+        list_of_steps.extend(steps_for_event_action(self, gamestate))
         self.run_steps(gamestate, list_of_steps)
 
 
@@ -946,8 +949,6 @@ class BattleStepBranchOut(Action):
         if gamestate.attack_declared == True:
             self.args['ad_action'] = gamestate.attack_declared_action
             
-            
-
             if AttackerStillOnFieldInAttackPosition(gamestate, self.args):
                 if AttackTargetingReplayCondition(gamestate, self.args):
                     list_of_steps.append(engine.HaltableStep.InitAndRunAction(self, AttackTargetingReplay, 'ad_action'))
@@ -969,16 +970,6 @@ class BattleStepBranchOut(Action):
                 gamestate.steps_to_do.appendleft(list_of_steps[i])
         
         gamestate.run_steps()
-
-
-class RunMAWsForAttackMadeImpossible(Action):
-    def run(self, gamestate):
-        list_of_steps = [engine.HaltableStep.CancelAttackInGamestate(self),
-                        engine.HaltableStep.SetMultipleActionWindow(gamestate.turnplayer, 'battle_phase_battle_step'),
-                        engine.HaltableStep.SetMultipleActionWindow(gamestate.otherplayer, 'battle_phase_battle_step'),
-                        engine.HaltableStep.RunAction(self, LaunchEndStep())]
-
-        self.run_steps(gamestate, list_of_steps)
 
 
 def TargetIsMonsterAndIsFaceDown(gamestate, args, target_arg_name):

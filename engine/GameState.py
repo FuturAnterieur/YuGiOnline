@@ -7,6 +7,7 @@ from engine.Event import Event
 
 import engine.CardModels.NormalMonsterCardModels as NM
 import engine.CardModels.TrapHole as TH
+import engine.CardModels.MysticalSpaceTyphoon as MST
 
 import copy
 
@@ -140,6 +141,7 @@ class GameState:
         
 
         self.bans = []
+        self.modifiers = []
 
         
         self.trigger_events = [] #categories : MSS1, OSS1, OFast (i.e. Consolation Prize). MFast is considered as a respond event.
@@ -181,6 +183,8 @@ class GameState:
             self.kaiba.add_card_to_deck(self.cardsById[-1])
             self.cardcounter += 1
 
+        self.cur_card_choices = []
+
     def startup(self):
         self.has_started = True
         self.sio.emit('begin_duel', {}, room="duel" + str(self.duel_id) + "_public_info")
@@ -219,11 +223,11 @@ class GameState:
     def standby_phase(self):
         self.phase_transition('standby_phase')
         #if cards can be activated (like Treeborn Frog), run a SetMultipleActionWindow for the turnplayer
-        possible_cards, choices_per_card = self.get_available_choices(self.turnplayer)
+        self.refresh_available_choices(self.turnplayer)
         list_of_steps = []
 
 
-        if len(possible_cards) > 0:
+        if len(self.cur_card_choices) > 0:
             list_of_steps.append(engine.HaltableStep.SetMultipleActionWindow(self.turnplayer, 'standby_phase'))
 
         for i in range(len(list_of_steps) - 1, -1, -1):
@@ -362,60 +366,35 @@ class GameState:
         self.turnplayer = self.otherplayer
         self.otherplayer = self.turnplayer.other
 
-    def get_available_choices(self, player):
-        counter = 0
-        choices = {}
-        choicesforcards = {}
+    def refresh_available_choices(self, player):
         card_choices = []
         for handcard in player.hand.cards:
-            index = "hand" + str(counter)
-            choicesforcards[index] = handcard.refresh_and_give_current_choices(self)
-            if len(choicesforcards[index]) > 0:
-                choices[index] = handcard
+            if len(handcard.refresh_and_give_current_choices(self)) > 0:
                 card_choices.append(handcard)
-            counter += 1
-
+        
         counter = 0
         for monsterzone in player.monsterzones.listofzones:
             index = "monster" + str(counter)
             if counter in player.monsterzones.occupiedzonenums:
                 monstercard = monsterzone.cards[0]
-                choicesforcards[index] = monstercard.refresh_and_give_current_choices(self)
-                if len(choicesforcards[index]) > 0:
-                    choices[index] = monstercard
+                if len(monstercard.refresh_and_give_current_choices(self)) > 0:
                     card_choices.append(monstercard)
             counter += 1
 
         counter = 0
         for magiczone in player.spelltrapzones.listofzones:
-            index = "spelltrap" + str(counter)
             if counter in player.spelltrapzones.occupiedzonenums:
                 magiccard = magiczone.cards[0]
                 #some continuous spell/trap cards have activatable effects
-                choicesforcards[index] = magiccard.refresh_and_give_current_choices(self)
-                if len(choicesforcards[index]) > 0:
-                    choices[index] = magiccard
+                if len(magiccard.refresh_and_give_current_choices(self)) > 0:
                     card_choices.append(magiccard)
             counter += 1
 
-        counter = 0
         for gycard in player.graveyard.cards:
-            index = "GY" + str(counter)
-            choicesforcards[index] = gycard.refresh_and_give_current_choices(self)
-            if len(choicesforcards[index]) > 0:
-                choices[index] = gycard
+            if len(gycard.refresh_and_give_current_choices(self)) > 0:
                 card_choices.append(gycard)
-            counter += 1
     
-        for i, card in choices.items():
-            if card is None:
-                print(i)
-            else:
-                print(i + " : " + card.name)
-
         self.cur_card_choices = card_choices
-
-        return choices, choicesforcards
         
     def add_ban(self, ban):
         self.bans.append(ban)
@@ -494,7 +473,7 @@ def get_default_gamestate(sio, duel_id):
     #kaiba_deck = [NM.MysticalElf, NM.SummonedSkull, NM.AlexandriteDragon]
 
     yugi_deck = [NM.DarkMagician, NM.MysticalElf, TH.TrapHole]
-    kaiba_deck = [NM.MysticalElf, NM.SummonedSkull, NM.AlexandriteDragon]
+    kaiba_deck = [NM.MysticalElf, NM.SummonedSkull, NM.AlexandriteDragon, MST.MysticalSpaceTyphoon]
 
     theduel = GameState(yugi_deck, kaiba_deck, sio, duel_id)
 

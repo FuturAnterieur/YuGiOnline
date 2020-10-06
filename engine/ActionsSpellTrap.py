@@ -102,7 +102,14 @@ class ActivateNormalOrQuickPlaySpell(Action):
         if self.check_for_bans(gamestate) == False:
             return False
 
-        if self.card.location == "Hand" and len(self.player.spelltrapzones.occupiedzonenums == 5):
+        if gamestate.curphase == "standby_phase":
+            return False
+
+        if self.card.face_up == FACEUPTOEVERYONE:
+            #this is equivalent to a 'once per chain' constraint
+            return False
+
+        if self.card.location == "Hand" and len(self.player.spelltrapzones.occupiedzonenums) == 5:
             return False
 
         if self.card.spelltype == "Normal" and (gamestate.curphase == "battle_phase" 
@@ -218,10 +225,11 @@ class ResolveEffectCore(Action):
 
     
     def run(self, gamestate):
-        list_of_steps = [engine.HaltableStep.ProcessTriggerEvents(self),
+        list_of_steps = [engine.HaltableStep.ClearLRAIfRecording(self),
+                         engine.HaltableStep.ProcessTriggerEvents(self),
                          engine.HaltableStep.RunImmediateEvents(self), #for 'an effect is resolving' (see Abyss-scale of the Kraken)
-                        engine.HaltableStep.ClearLRAIfRecording(self),
-                         engine.HaltableStep.CallEffectResolve(self, 'effect')] #the Effect Resolve will call its own trigger-setting steps
+                         engine.HaltableStep.CallEffectResolve(self, 'effect'), #the Effect Resolve will call its own trigger-setting steps
+                         engine.HaltableStep.AppendToLRAIfRecording(self)] 
                          #engine.HaltableStep.ProcessTriggerEvents(self),
                          #engine.HaltableStep.AppendToLRAIfRecording(self), #for the actual action of resolving the card
                          #engine.HaltableStep.RunImmediateEvents(self)]

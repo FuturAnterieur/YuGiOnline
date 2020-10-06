@@ -27,9 +27,23 @@ class SpellTrapCardModel(CardModel):
         self.subclass = subclass
         self.effect_class = effect_class
 
-class NormalTrapCardModel(SpellTrapCardModel):
+class TrapCardModel(SpellTrapCardModel):
+    def __init__(self, name, text, imgpath, traptype, effect_class):
+        super().__init__(name, text, imgpath, 'Trap', effect_class)
+        self.traptype = traptype
+
+class NormalTrapCardModel(TrapCardModel):
     def __init__(self, name, text, imgpath, effect_class):
-        super().__init__(name, text, imgpath, 'Normal Trap', effect_class)
+        super().__init__(name, text, imgpath, 'Normal', effect_class)
+
+class SpellCardModel(SpellTrapCardModel):
+    def __init__(self, name, text, imgpath, spelltype, effect_class):
+        super().__init__(name, text, imgpath, 'Spell', effect_class)
+        self.spelltype = spelltype
+
+class QuickPlaySpellCardModel(SpellCardModel):
+    def __init__(self, name, text, imgpath, effect_class):
+        super().__init__(name, text, imgpath, 'Quick-Play', effect_class)
 
 
 

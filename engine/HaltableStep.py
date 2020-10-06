@@ -727,9 +727,9 @@ class OpenWindowForResponse(HaltableStep):
         #check if responding player can play something first
         refresh_in_timing_respond_OFast_CL(gamestate)
 
-        possible_cards, choices_per_card = gamestate.get_available_choices(responding_player)
+        gamestate.refresh_available_choices(responding_player)
         
-        answer_choices = ['Yes', 'No'] if len(possible_cards) > 0 else ['No']
+        answer_choices = ['Yes', 'No'] if len(gamestate.cur_card_choices) > 0 else ['No']
         
         gamestate.sio.emit('start_waiting', {'reason' : self.response_type},
                                 room =  "duel" + str(gamestate.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
@@ -760,14 +760,16 @@ class SetMultipleActionWindow(HaltableStep):
 
         gamestate.lastresolvedactions.clear() #I think I can put this here
         
-        possible_cards, choices_per_card = gamestate.get_available_choices(self.controlling_player)
+        gamestate.refresh_available_choices(self.controlling_player)
+
+        possible_card_names = [card.name for card in gamestate.cur_card_choices]
 
         gamestate.player_in_multiple_action_window = self.controlling_player
         waiting_player = self.controlling_player.other
 
         gamestate.sio.emit('start_waiting', {'reason' : self.current_phase_or_step},
                                 room =  "duel" + str(gamestate.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
-        gamestate.sio.emit('multiple_action_window', {'current_phase_or_step' : self.current_phase_or_step}, 
+        gamestate.sio.emit('multiple_action_window', {'current_phase_or_step' : self.current_phase_or_step, 'possible_cards' : possible_card_names}, 
                                 room =  "duel" + str(gamestate.duel_id) + "_player" + str(self.controlling_player.player_id) + "_info")
 
         gamestate.keep_running_steps = False

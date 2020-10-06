@@ -153,12 +153,23 @@ $(document).ready(function(){
 	    CardManager.cachedClickMode = 0;
             CardManager.clickMode = 0;
 	    
-	    $("#message").text(msg.current_phase_or_step + " : Launch actions");
-	    button_html = "<button id=\"Pass\">Pass</button>";
-	    $("#choice_buttons").html(button_html);
-	    $("#Pass").click(function() {
-		CardManager.passAction();		       
-	    });	       	
+		if (msg.possible_cards.length > 0)
+		{
+
+	   	 	$("#message").text(msg.current_phase_or_step + " : Launch actions");
+	    		button_html = "<button id=\"Pass\">Pass</button>";
+	    		$("#choice_buttons").html(button_html);
+	    		$("#Pass").click(function() {
+				CardManager.passAction();
+			});
+		}
+		else
+		{
+			$("#message").text(msg.current_phase_or_step + " : No action possible");
+			var cur_waiter = setTimeout(function () { 
+		 		CardManager.passAction(); 
+	     		}, 1000);
+		}      	
 	});
 
 	socket.on('change_LP', function(msg) {

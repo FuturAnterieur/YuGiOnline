@@ -3,20 +3,25 @@ import engine.Action
 from engine.Event import Event
 import engine.Bans
 
-from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, STATE_NOTINEFFECT, STATE_PRE_ACTIVATE, STATE_ACTIVATE, STATE_RESOLVE, CAUSE_EFFECT
+from engine.Parameter import Parameter 
+
+from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, CAUSE_EFFECT
 
 class Effect:
     def __init__(self, name, etype):
         self.name = name
         self.type = etype
-        
+        self.is_negated = Parameter(self, 'is_negated', False)
+        #other possibility:
+        #self.params = {'is_negated' : Parameter(self, 'is_negated', False)}
+
         self.ActivateActionInfoList = []
         self.ResolveActionLInfoList = []
 
     def init(self, parent_card):
         self.parent_card = parent_card
 
-    def blocks_action(self, action, effect_state = STATE_NOTINEFFECT):
+    def blocks_action(self, action):
         return False
 
 
@@ -63,9 +68,8 @@ class UnaffectedByTrap(Effect):
         self.card = card
         self.is_negated = False
 
-    def blocks_action(self, action, effect_state = STATE_NOTINEFFECT):
-        #Allow events to match and activation actions to proceed, but cause Resolves to proceed without effect
-        if action.parent_effect is not None and action.parent_effect.parent_card.cardclass == "Trap" and effect_state == STATE_RESOLVE:
+    def blocks_action(self, action):
+        if action.parent_effect is not None and action.parent_effect.parent_card.cardclass == "Trap":
             return True
         else:
             return False
@@ -79,7 +83,7 @@ class CantBeTargetedByTrap(Effect):
         self.card = card
         self.is_negated = False
 
-    def blocks_action(self, action, effect_state = STATE_NOTINEFFECT):
+    def blocks_action(self, action):
         if action.parent_effect.parent_card.cardclass == "Trap" and action.__class__.__name__ == "Target":
             return True
         else:
