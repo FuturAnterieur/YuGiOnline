@@ -41,14 +41,13 @@ class Graveyard(Zone):
         super(Graveyard, self).add_card(card)
         card.location = "Graveyard"
         card.face_up = FACEUPTOEVERYONE
-        #card.on_send_to_graveyard()
-        #card.on_destroy() just as we can't call card.on_discard() here either
+        
 
 class Banished(Zone):
     def __init__(self, name, owner):
         super().__init__(name, 75, owner, "Banished")
 
-    def add_card(self, card, face_up):
+    def add_card(self, card, face_up = FACEUPTOEVERYONE):
         super().add_card(card)
         card.location = "Banished"
         card.face_up = face_up

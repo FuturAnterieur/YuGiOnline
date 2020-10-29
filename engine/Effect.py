@@ -21,32 +21,71 @@ class Effect:
     def init(self, parent_card):
         self.parent_card = parent_card
 
-    def blocks_action(self, action):
+    def blocks_action(self, action, gamestate):
         return False
+
+    def can_prevent_activation_attempt(self, in_activate_or_resolve):
+        return False
+
+    def unaffected_by(self, effect, gamestate):
+        return False
+
+    def check_if_subject_is_affected(self, subject, gamestate):
+        affected = True
+        for effect in subject.effects:
+            if effect.unaffected_by(self, gamestate):
+                affected = False
+                break
+
+        return affected
+
+    def check_if_activation_is_allowed(self, action_desc_list, gamestate):
+        unbanned = True
+        unblocked = True
+        for action_desc in action_desc_list:
+            for ban in gamestate.bans:
+                if ban.bans_action(action_desc['action'], gamestate):
+                    unbanned = False
+                    break
+
+            for effect in action_desc['card'].effects:
+                if effect.blocks_action(action_desc['action'], gamestate) and effect.can_prevent_activation_attempt(action_desc['in_activate_or_resolve']):
+                    unblocked = False
+                    break
+
+            if unbanned == False or unblocked == False:
+                break
+
+        return unbanned and unblocked
+
+
+    def check_if_resolve_is_blocked(self, action_desc_list, gamestate):
+        unbanned = True
+        unblocked = True
+        for action_desc in action_desc_list:
+            for ban in gamestate.bans:
+                if ban.bans_action(action_desc['action'], gamestate):
+                    unbanned = False
+                    break
+
+            for effect in action_desc['card'].effects:
+                if effect.blocks_action(action_desc['action'], gamestate):
+                    unblocked = False
+                    break
+
+            if unbanned == False or unblocked == False:
+                break
+
+        return unbanned and unblocked
 
 
 class PassiveEffect(Effect):
     def __init__(self, name, etype):
-        super().__init__(self, name, etype)
-        self.is_dormant = False
-        self.is_negated = False
+        super().__init__(name, etype)
         self.is_on = False
         
     def init(self, parent_card):
-        super().init(self, parent_card)
-
-    def Negate(self, gamestate):
-        if self.is_on:
-            self.TurnOff(gamestate)
-            self.is_dormant = True
-
-        self.is_negated = True
-
-    def UnNegate(self, gamestate):
-        self.is_negated = False
-        if self.is_dormant:
-            self.is_dormant = False
-            self.TurnOn(gamestate) 
+        super().init(parent_card)
 
 
 def MatchOnADC(action, gamestate):
@@ -66,10 +105,10 @@ class UnaffectedByTrap(Effect):
     
     def init(self, gamestate, card):
         self.card = card
-        self.is_negated = False
-
-    def blocks_action(self, action):
-        if action.parent_effect is not None and action.parent_effect.parent_card.cardclass == "Trap":
+        
+    #do not block actions and effects at time of activating
+    def unaffected_by(self, effect, gamestate):
+        if effect.parent_card.cardclass == "Trap" and self.is_negated.get_value(gamestate) == False:
             return True
         else:
             return False
@@ -89,6 +128,45 @@ class CantBeTargetedByTrap(Effect):
         else:
             return False
 
+    def can_prevent_activation_attempt(self, action_in_activate_or_resolve):
+        return True
+
+
+def getContinuousCardTurnOnEffectClass(name, passive_effect_class, spellspeed):
+    class ContinuousCardTurnOnEffect(Effect):
+        def __init__(self):
+            super().__init__(name, "Trap")
+            self.PassiveEffectClass = passive_effect_class
+            self.spellspeed = spellspeed
+
+        def init(self, gamestate, card):
+            super().init(card)
+            self.passive_effect = self.PassiveEffectClass(name, "Passive")
+            self.passive_effect.init(gamestate, card)
+
+            self.TurnOffEvent = Event("PETO", self.parent_card, self, None, "immediate", "", self.MatchPETurnOff)
+            self.TurnOffEvent.funclist.append(self.OnPETurnOff)
+
+        def reqs(self, gamestate):
+            return True
+
+        def Activate(self, gamestate):
+            pass
+
+        def Resolve(self, gamestate):
+            self.passive_effect.TurnOn(gamestate)
+            gamestate.immediate_events.append(self.TurnOffEvent)
+        
+        def MatchPETurnOff(self, action, gamestate):
+            return action.__class__.__name__ == "TurnOffPassiveEffects" and action.zone.type == "Field" and action.card == self.parent_card
+
+        def OnPETurnOff(self, gamestate):
+            self.passive_effect.TurnOff(gamestate)
+            if self.TurnOffEvent in gamestate.immediate_events:
+                gamestate.immediate_events.remove(self.TurnOffEvent)
+
+    return ContinuousCardTurnOnEffect
+
 
 
 class ImperialIronWallTurnOnEffect(Effect):
@@ -97,7 +175,6 @@ class ImperialIronWallTurnOnEffect(Effect):
 
     def init(self, gamestate, card):
         super().init(card)
-        self.was_negated = False
         self.spellspeed = 2
         self.IIWpassiveeffect = ImperialIronWallPassiveEffect()
         self.IIWpassiveeffect.init(gamestate, card)
@@ -130,47 +207,23 @@ class ImperialIronWallPassiveEffect(PassiveEffect):
 
     def init(self, gamestate, card):
         super().init(card)
-        self.is_on = False
-        self.is_negated = False
-        self.is_dormant = False
+        self.spellspeed = 2
 
         self.intercepted_action = None
 
-        self.BanishBan = engine.Bans.BanishBan()
-
-        self.IIWOnCardBanished = Event("IIWOnBanish", self.parent_card, self, "immediate", "", self.MatchOnCardBanished)
-        self.IIWOnCardBanished.funclist.append(self.PreventBanish)
-
-    
-    def MatchOnCardBanished(self, action):
-        #I think the only way this would be possible is if the tozone was changed by another banishing effect
-        matched = False
-        if action.__class__.__name__ == "ApplyBansForChangeCardZone" and action.parentAction.name == CCZBANISH:
-            self.intercepted_action = action.parentAction
-            matched = True
-
-        return matched
-
-    def PreventBanish(self, gamestate):    
-        self.intercepted_action.name = self.intercepted_action.intended_action
-        self.intercepted_action.args['tozone'] = self.intercepted_action.intended_tozone
-
-        #CCZ actions whose intended goal is to banish will all be caught by the ban, either at eventing time (check in the MatchEvent function),
-        #before activation time (check in the reqs function) or at resolving time (in the Resolve function).
+        self.BanishBan = engine.Bans.BanishBan(self)
 
     def TurnOn(self, gamestate):
-        if self.is_on == False and self.is_negated == False:
+        if self.is_on == False:
             self.is_on = True
-            gamestate.add_ban(self.BanishBan)
-            gamestate.immediate_events.append(self.IIWOnCardBanished)
+            gamestate.add_ban(self.BanishBan) #negation check will go in the ban's function
+            #gamestate.CCZBanModifiers.append(self.IIWOnCardBanished)
 
     def TurnOff(self, gamestate):
         if self.is_on:
             gamestate.remove_ban(self.BanishBan)
-            gamestate.immediate_events.remove(self.IIWOnCardBanished)
+            #gamestate.CCZBanModifiers.remove(self.IIWOnCardBanished)
 
         self.is_on = False
-        self.is_dormant = False
 
-    
 

@@ -45,6 +45,7 @@ var CardManager = {
 	this.initZone("my", "Deck", 750, 500);
 	this.initZone("my", "GY", 750, 420);
 	this.initZone("my", "Hand", 450, 500);
+	this.initZone("my", "Banished", 750, 400);
 
 	var i = 0; var x_start = 100; var my_monster_y = 360;
 
@@ -62,6 +63,7 @@ var CardManager = {
 	this.initZone("his", "Deck", 150, 20);
 	this.initZone("his", "GY", 150, 180);
 	this.initZone("his", "Hand", 450, 20);
+	this.initZone("his", "Banished", 150, 260);
 
 	var his_monster_y = 180;
 	for(i = 0; i < 5; i++)

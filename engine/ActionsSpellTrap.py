@@ -57,18 +57,23 @@ class SetSpellTrap(Action):
 
 
 
-def get_spelltrap_resolve_steps(action):
+def get_spelltrap_resolve_steps(action, chain_sends_to_graveyard = True):
+
+    cstg_step = engine.HaltableStep.DoNothing(action)
+    if chain_sends_to_graveyard:
+        cstg_step = engine.HaltableStep.RunStepIfCondition(action,
+                                        engine.HaltableStep.AddCardToChainSendsToGraveyard(action, 'card'),
+                                        CheckIfCardOnField, 'card')
+
+         #cards which have had their activation negated are considered as not being on the field for other effects' purposes.
+                         #but for the ChainSendsToGraveyard, they should be considered as being on the field.
+
     list_of_steps = [engine.HaltableStep.UnsetBuildingChain(action),
                          engine.HaltableStep.PopChainLinks(action),
                          engine.HaltableStep.RunStepIfCondition(action, 
                                         engine.HaltableStep.InitAndRunAction(action, ResolveEffectCore, 'card', 'effect'),
                                         CheckIfNotNegated, 'this_action'),
-                         engine.HaltableStep.RunStepIfCondition(action,
-                                        engine.HaltableStep.AddCardToChainSendsToGraveyard(action, 'card'),
-                                        CheckIfCardOnField, 'card'), 
-                         #cards which have had their activation negated are considered as not being on the field for other effects' purposes.
-                         #but for the ChainSendsToGraveyard, they should be considered as being on the field.
-
+                         cstg_step, 
                          engine.HaltableStep.RunStepIfCondition(action, 
                                                 engine.HaltableStep.RunAction(action, ChainSendsToGraveyard()), EndOfChainCondition),
                          engine.HaltableStep.RunStepIfCondition(action, engine.HaltableStep.RunAction(action, RunEvents('Chain resolved')), RunEventsCondition),
@@ -174,6 +179,9 @@ def basic_reqs_for_trap(action, gamestate):
     if action.card.wassetthisturn == True:
         return False
 
+    if gamestate.curphase == "standby_phase":
+        return False
+
     return True
 
 class ActivateNormalTrap(Action):
@@ -213,8 +221,43 @@ class ActivateNormalTrap(Action):
     def default_run(self, gamestate):
         self.run_steps(gamestate)
                          
-            
+    run_func = default_run
+
+class ActivateContinuousTrap(Action):
+    def init(self, card, effect):
+        super().init("Activate Continuous Trap", card)
+        self.effect = effect
+        self.args = {'this_action' : self, 'card' : card, 'effect' : effect, 'actionplayer' : card.owner, 
+                        'otherplayer' : card.owner.other, 'action_name' : 'Normal trap activated'}
+
+        self.list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
+                        engine.HaltableStep.SetBuildingChain(self),
+                         engine.HaltableStep.ActivateSpellTrapBeforeActivate(self, 'card', 'effect'),
+                         engine.HaltableStep.ChangeCardVisibility(self, ['otherplayer', 'actionplayer'], 'card', "1"),
+                         engine.HaltableStep.AppendToChainLinks(self),
+                         engine.HaltableStep.DisableLRARecording(self),
+                         engine.HaltableStep.CallEffectActivate(self, 'effect'),
+                         engine.HaltableStep.EnableLRARecording(self),
+                         engine.HaltableStep.InitAndRunAction(self, RunResponseWindows, 'otherplayer', 'action_name')] + get_spelltrap_resolve_steps(self, False)
+
+    def reqs(self, gamestate):
+        if self.check_for_bans(gamestate) == False:
+            return False
         
+        if basic_reqs_for_trap(self, gamestate) == False:
+            return False
+
+        if self.effect.reqs(gamestate) == False:
+            return False
+
+        if self.card.face_up != FACEDOWN: #or I could put a 'once per chain' constraint
+            return False
+
+        return True
+
+    def default_run(self, gamestate):
+        self.run_steps(gamestate)
+
     run_func = default_run
 
 class ResolveEffectCore(Action):

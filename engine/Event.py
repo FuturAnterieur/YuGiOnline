@@ -8,14 +8,17 @@ def GetEventCurrentPlayer(event, gamestate):
     return "TP" if event.card.owner == gamestate.turnplayer else "OP"
 
 class Event:
-    def __init__(self, name, card, effect, triggertype, category, matches):
-        self.card = card
+    def __init__(self, name, card, effect, activate_action, triggertype, category, matches):
+        self.activate_action = activate_action
+        self.parent_card = card
+        self.parent_effect = effect
+
         self.type = triggertype #respond or trigger
         self.category = category
         self.name = name
         self.matches = matches
         self.funclist = []
-        self.effect = effect
+        
         self.in_timing = False
 
     def execute(self, gamestate):
@@ -25,16 +28,16 @@ class Event:
     def is_spell_speed_sufficient(self, gamestate): 
         
         if gamestate.curspellspeed <= 1:
-            return self.effect.spellspeed > gamestate.curspellspeed 
+            return self.parent_effect.spellspeed > gamestate.curspellspeed 
 
         elif gamestate.curspellspeed > 1:
-            return self.effect.spellspeed >= gamestate.curspellspeed
+            return self.parent_effect.spellspeed >= gamestate.curspellspeed
 
     def is_in_timing_events(self, gamestate):
         #as things stand now, this will only be called in the case where the category is OFast,
         #but I provided functionality for the other categories
 
-        #and anyway, it has been superseded by the in_timing flag
+        #and anyway, even for OFast, it has been superseded by the in_timing flag
         full_category = ""
         if self.category == "OFast":
             full_category = self.type + "_" + self.category
@@ -47,3 +50,11 @@ class Event:
 
         else: #MFast : won't be used either
             return True
+
+    def get_activate_action(self):
+        if self.activate_action is not None:
+            actiondict = self.activate_action[0]
+            actionname = self.activate_action[1]
+            return actiondict[actionname]
+        else:
+            return None

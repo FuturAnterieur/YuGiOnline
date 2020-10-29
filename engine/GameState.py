@@ -8,6 +8,7 @@ from engine.Event import Event
 import engine.CardModels.NormalMonsterCardModels as NM
 import engine.CardModels.TrapHole as TH
 import engine.CardModels.MysticalSpaceTyphoon as MST
+import engine.CardModels.MacroCosmos as MC
 
 import copy
 
@@ -87,11 +88,25 @@ class GameState:
         Example scenario : 
         A single card effect causes both players to add all 5 pieces of "Exodia" to their hand, like 'Card Destruction'.
 
-        In Exodia's effect, there is an immediate trigger for the Draw Action that does three things :
+        In Exodia's effect, there is an immediate trigger for the Draw Action that does these things :
+        If we are resolving an effect :
             - it sets gamestate.end_condition_reached to True
             - it appends the Exodia piece's owner to gamestate.winners
             - it adds a StopDuelIfVictoryConditionCheck to the left of the gamestate.steps_to_do deque.
               This covers the simple case where a single player draws one card and just happens to get the missing piece of Exodia.
+        If we are activating an effect :
+            - do nothing about the end conditions, but make sure there is a trigger that will check for these conditions
+                at the next resolution of events. This on-resolution trigger can be placed at the same time as the Draw one, 
+                or only in this "if we are activating an effect" clause if we wish to be more precise.
+
+
+        Alternative : we create a VictoryCondition container in the gamestate
+        And after each action resolution we check every victory condition in the container
+        But that would require putting this VictoryConditionCheckStep at the end of every
+        main action in the game
+
+        hmmm
+        
 
         In Card Destruction's effect's resolve, 
             there is a first set of discard actions that all happen simultaneously,
@@ -109,7 +124,7 @@ class GameState:
            steps.append(ClearLRA) 
 
             for i in range(n)
-                steps.append(RunTheAction - Draw)
+                steps.append(RunAction - Draw)
                 
             steps.append(SetCanEndNowToTrue)
             
@@ -142,6 +157,8 @@ class GameState:
 
         self.bans = []
         self.modifiers = []
+        self.CCZModifiers = []
+        self.CCZBanModifiers = []
 
         
         self.trigger_events = [] #categories : MSS1, OSS1, OFast (i.e. Consolation Prize). MFast is considered as a respond event.
@@ -162,24 +179,27 @@ class GameState:
                                 'trigger_MSS1TP' : [],  'trigger_MSS1OP' : [], 'trigger_OSS1TP' : [], 'trigger_OSS1OP' : [],
                                 'trigger_OFast' : []}
 
+        self.events_meeting_reqs = {'respond_MSS1TP' : [], 'respond_MSS1OP' : [], 'respond_OSS1TP' : [], 'respond_OSS1OP' : [],
+                                     'trigger_MSS1TP' : [],  'trigger_MSS1OP' : [], 'trigger_OSS1TP' : [], 'trigger_OSS1OP' : []}
+
         
         #Mandatory fast events go directly in self.triggers_to_run
 
         self.AttackReplayTrigger = Event("AttackReplayTrigger", None, 
-                                    None, "immediate", None, self.MatchAttackConditionChanges)
+                                    None, None, "immediate", None, self.MatchAttackConditionChanges)
         self.AttackReplayTrigger.funclist.append(self.SetReplayWasTriggered)
 
         self.cardsById = []
 
         self.cardcounter = 0
         
-        for cardmodel in yugi_deck:
-            self.cardsById.append(engine.Cards.generate_card(cardmodel, self, self.cardcounter, self.yugi))
+        for cardclass in yugi_deck:
+            self.cardsById.append(cardclass(self.cardcounter, self.yugi, self))
             self.yugi.add_card_to_deck(self.cardsById[-1])
             self.cardcounter += 1
             
-        for cardmodel in kaiba_deck:
-            self.cardsById.append(engine.Cards.generate_card(cardmodel, self, self.cardcounter, self.kaiba))
+        for cardclass in kaiba_deck:
+            self.cardsById.append(cardclass(self.cardcounter, self.kaiba, self))
             self.kaiba.add_card_to_deck(self.cardsById[-1])
             self.cardcounter += 1
 
@@ -472,7 +492,7 @@ def get_default_gamestate(sio, duel_id):
     #yugi_deck = [NM.DarkMagician, NM.MysticalElf, TH.TrapHole]
     #kaiba_deck = [NM.MysticalElf, NM.SummonedSkull, NM.AlexandriteDragon]
 
-    yugi_deck = [NM.DarkMagician, NM.MysticalElf, TH.TrapHole]
+    yugi_deck = [NM.DarkMagician, NM.MysticalElf, TH.TrapHole, MC.MacroCosmos]
     kaiba_deck = [NM.MysticalElf, NM.SummonedSkull, NM.AlexandriteDragon, MST.MysticalSpaceTyphoon]
 
     theduel = GameState(yugi_deck, kaiba_deck, sio, duel_id)

@@ -4,14 +4,6 @@ import engine.ActionsSpellTrap as ActionsSpellTrap
 from engine.defs import FACEDOWN
 
 
-
-
-def generate_card(cardmodel, gamestate, ID, owner):
-    cardclassname = cardmodel.__class__.__name__.replace("Model", '')
-    new_card = globals()[cardclassname](cardmodel, ID, owner, gamestate)
-    return new_card
-
-
 class Card:
     def __init__(self, name, text, cardclass, imgpath, ID, owner, gamestate): 
         
@@ -76,9 +68,8 @@ class MonsterCard(Card):
 
 
 class NormalMonsterCard(MonsterCard):
-    def __init__(self, cm, ID, owner, gamestate):
-        super().__init__(cm.name, cm.attr, cm.type, cm.level, cm.attack, cm.defense, 
-                cm.text, cm.monsterclass, cm.effects_classes, cm.imgpath, ID, owner, gamestate)
+    def __init__(self, name, text, imgpath, attr, mtype, level, attack, defense, ID, owner, gamestate):
+        super().__init__(name, attr, mtype, level, attack, defense, text, 'Normal', [], imgpath, ID, owner, gamestate)
         if(self.level > 4 and self.level <= 6):
             self.numtributesrequired = 1
         elif(self.level > 6):
@@ -95,6 +86,7 @@ class SpellTrapCard(Card):
         self.actiondict["Set"].init(self)
         self.effects[0].init(gamestate, self)
         
+        
 class TrapCard(SpellTrapCard):
     def __init__(self, name, traptype, text, effect_class, imgpath, ID, owner, gamestate):
         super().__init__(name, 'Trap', text, effect_class, imgpath, ID, owner, gamestate)
@@ -102,9 +94,15 @@ class TrapCard(SpellTrapCard):
 
 
 class NormalTrapCard(TrapCard):
-    def __init__(self, cm, ID, owner, gamestate):
-        super().__init__(cm.name, cm.traptype, cm.text, cm.effect_class, cm.imgpath, ID, owner, gamestate)
+    def __init__(self, name, text, imgpath, effect_class, ID, owner, gamestate):
+        super().__init__(name, 'Normal', text, effect_class, imgpath, ID, owner, gamestate)
         self.actiondict["Activate"] = ActionsSpellTrap.ActivateNormalTrap()
+        self.actiondict["Activate"].init(self, self.effects[0])
+
+class ContinuousTrapCard(TrapCard):
+    def __init__(self, name, text, imgpath, effect_class, ID, owner, gamestate):
+        super().__init__(name, "Continuous", text, effect_class, imgpath, ID, owner, gamestate)
+        self.actiondict["Activate"] = ActionsSpellTrap.ActivateContinuousTrap()
         self.actiondict["Activate"].init(self, self.effects[0])
 
 class SpellCard(SpellTrapCard):
@@ -113,15 +111,15 @@ class SpellCard(SpellTrapCard):
         self.spelltype = spelltype
 
 class QuickPlaySpellCard(SpellCard):
-    def __init__(self, cm, ID, owner, gamestate):
-        super().__init__(cm.name, cm.subclass, cm.text, cm.effect_class, cm.imgpath, ID, owner, gamestate)
+    def __init__(self, name, text, imgpath, effect_class, ID, owner, gamestate):
+        super().__init__(name, 'Quick-Play', text, effect_class, imgpath, ID, owner, gamestate)
         self.actiondict["Activate"] = ActionsSpellTrap.ActivateNormalOrQuickPlaySpell()
         self.actiondict["Activate"].init(self, self.effects[0])
 
 
 class ContinuousSpellCard(SpellTrapCard):
-    def __init__(self, cm, ID, owner, gamestate):
-        super().__init__(cm.name, cm.subclass, cm.text, cm.effect_class, cm.imgpath, ID, owner, gamestate)
+    def __init__(self, name, text, imgpath, effect_class, ID, owner, gamestate):
+        super().__init__(name, 'Continuous', text, effect_class, imgpath, ID, owner, gamestate)
         if self.effects[0].type == "Passive":
             self.actiondict["Activate"] = ActionsSpellTrap.ActivateContinuousPassiveSpell()
             self.actiondict["Activate"].init(gamestate, self, self.effects[0])

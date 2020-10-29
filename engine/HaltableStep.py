@@ -85,7 +85,8 @@ class ProcessMandatoryRespondEvents(HaltableStep):
                 if trigger.category == "MFast" and trigger.action_it_responds_to is None: 
                     highest_matching_chain_link = None
                     for action in gamestate.chainlinks:
-                        if trigger.matches(action, gamestate):
+                        if trigger.matches(action, gamestate) and trigger.get_activate_action().reqs(gamestate):
+                            #the check for reqs is more experimental and might change
                             highest_matching_chain_link = action
                     
                     if highest_matching_chain_link is not None:
@@ -116,9 +117,10 @@ def refresh_in_timing_ss1_respond_events(gamestate):
             #also MSS1 respond events don't really exist but I added them here as a theoretical construct
             full_category = "respond_" + AppendPlayerToEventCategory(event, gamestate)
             for action in gamestate.lastresolvedactions:
-                if event.matches(action, gamestate):
-                    gamestate.events_in_timing[full_category].append(event)
+                if event.matches(action, gamestate): 
                     event.in_timing = True
+                    gamestate.events_in_timing[full_category].append(event)
+                    
 
 def clear_in_timing_ss1_respond_events(gamestate):
     for category in ['respond_' + x for x in ['MSS1TP', 'MSS1OP', 'OSS1TP', 'OSS1OP']]:
@@ -128,10 +130,9 @@ def clear_in_timing_ss1_respond_events(gamestate):
 def refresh_in_timing_ss1_trigger_events(gamestate):
     for category in ['OSS1TP', 'OSS1OP', 'MSS1TP', 'MSS1OP']:
         for event in gamestate.saved_trigger_events[category]:
-            gamestate.events_in_timing['trigger_' + category].append(event)
             event.in_timing = True
-
-
+            gamestate.events_in_timing['trigger_' + category].append(event)
+          
 def clear_in_timing_ss1_trigger_events(gamestate):
     for category in ['trigger_' + x for x in ['MSS1TP', 'MSS1OP', 'OSS1TP', 'OSS1OP']]:
         clear_in_timing_category(gamestate, category)
@@ -139,6 +140,19 @@ def clear_in_timing_ss1_trigger_events(gamestate):
 def refresh_SEGOC_events(gamestate):
     refresh_in_timing_ss1_respond_events(gamestate)
     refresh_in_timing_ss1_trigger_events(gamestate)
+
+def refresh_SEGOC_events_meeting_reqs(gamestate):
+    for prefix in ['trigger_', 'respond_']:
+        for category in [prefix + x for x in ['OSS1TP', 'OSS1OP', 'MSS1TP', 'MSS1OP']]:
+            for event in gamestate.events_in_timing[category]:
+                
+                if event.get_activate_action().reqs(gamestate):
+                    gamestate.events_meeting_reqs[category].append(event)
+
+def clear_SEGOC_events_meeting_reqs(gamestate):
+    for prefix in ['trigger_', 'respond_']:
+        for category in [prefix + x for x in ['OSS1TP', 'OSS1OP', 'MSS1TP', 'MSS1OP']]:
+            gamestate.events_meeting_reqs[category].clear()
 
 def refresh_in_timing_optional_fast_respond_events(gamestate): 
     
@@ -219,6 +233,7 @@ class ClearSEGOCInTimingEvents(HaltableStep):
     def run(self, gamestate):
         clear_in_timing_ss1_trigger_events(gamestate)
         clear_in_timing_ss1_respond_events(gamestate)
+        clear_SEGOC_events_meeting_reqs(gamestate)
 
 class ClearInTimingOptionalFastTriggerEvents(HaltableStep):
     def run(self, gamestate):
@@ -342,6 +357,65 @@ class DestroyCardServer(HaltableStep):
         
         player.graveyard.add_card(card)
 
+class ProcessCCZModifiers(HaltableStep):
+    def run(self, gamestate):
+        #special case : Phantom of Chaos acquiring a CCZModifier effect like that of Dark Magician of Chaos
+        #of course DMC's effect applies to itself and it is banished when it leaves the field
+
+        #but PoC loses the CCZModifier effect before it has a chance to change its destination
+
+
+        #all CCZ modifiers change the action's destination
+        #so if two CCZ modifiers match the same action, the only way that they won't get into a conflict is if they both set 
+        #the destination to the same value
+
+        #and anyway only one can win
+        applicable_modifiers = []
+        counter = 0
+        for modifier in gamestate.CCZModifiers:
+            monster_with_gained_effect_leaving_field = self.parentAction.args['card'] == modifier.parent_card and self.parentAction.args['fromzone'].type == "Field" and modifier.was_gained == True
+
+            #lingering effects can't become negated or blocked by unaffectation
+            check_for_negated_and_unaffected = True
+            if modifier.is_continuous:
+                is_not_negated = modifier.check_for_negated(gamestate)
+                target_is_affected = modifier.check_for_unaffected(self.parentAction.args['card'], gamestate)
+                check_for_negated_and_unaffected = is_not_negated and target_is_affected
+
+            if modifier.matches(self.parentAction, gamestate) and check_for_negated_and_unaffected and not monster_with_gained_effect_leaving_field:
+                applicable_modifiers.append(modifier)
+                modifier.pos_in_modifier_list = counter
+                counter += 1
+
+        def keyfunc(modifier):
+            return 10*modifier.scope_indicator + modifier.parent_effect.spellspeed
+            #scope indicators go like this for now :
+            #0 for global modifiers (like Macro Cosmos)
+            #1 for group of selected cards (like Fantastic Striborg)
+            #2 for one specific card
+            
+            #what if there is a tie?
+            #keep the first one to appear in gamestate.CCZModifiers -- will be given by the default behavior of max
+        if len(applicable_modifiers) > 0:
+            chosen_modifier = max(applicable_modifiers, key=keyfunc)
+            chosen_modifier.apply(self.parentAction, gamestate)
+
+            unbanned = True
+            for ban in gamestate.bans:
+                parent_card_is_leaving_field = self.parentAction.args['card'] == ban.parent_card and self.parentAction.args['fromzone'].type == "Field"
+                if ban.bans_action(self.parentAction, gamestate) and not parent_card_is_leaving_field:
+                    unbanned = False
+                    break
+
+            not_immune = self.parentAction.check_for_blocks(self.parentAction.args['card'], gamestate)
+
+            if not unbanned or not not_immune:
+                #undo the changes
+                self.parentAction.args['tozone'] = self.parentAction.intended_tozone
+
+
+
+        
 class ChangeCardZoneServer(HaltableStep):
     def __init__(self, pA, card_arg_name, tozone_arg_name):
         super().__init__(pA)
@@ -358,6 +432,8 @@ class ChangeCardZoneServer(HaltableStep):
         else:
             card.zone.remove_card(card)
 
+
+        print(card.name + " sent to " + tozone.name)
         tozone.add_card(card)
 
 
