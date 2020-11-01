@@ -47,7 +47,7 @@ class MysticalSpaceTyphoonEffect(Effect):
     def Resolve(self, gamestate):
         #check if target still meets the requirements
         #if not, resolve without effect
-        if self.is_negated.get_value(gamestate) == False and self.args['targeted_spelltrap'].location == "Field" and self.check_if_subject_is_affected(self.args['targeted_spelltrap'], gamestate):
+        if self.is_negated.get_value(gamestate) == False and self.args['targeted_spelltrap'].location == "Field" and self.affects_card(self.args['targeted_spelltrap'], gamestate):
             DestroyAction = engine.Action.ChangeCardZone()
             DestroyAction.init(engine.Action.CCZDESTROY, self.args['targeted_spelltrap'], CAUSE_EFFECT, self)
             

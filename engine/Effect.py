@@ -3,7 +3,7 @@ import engine.Action
 from engine.Event import Event
 import engine.Bans
 
-from engine.Parameter import Parameter 
+from engine.Parameter import Parameter, ContinuousModifier
 
 from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, CAUSE_EFFECT
 
@@ -11,7 +11,7 @@ class Effect:
     def __init__(self, name, etype):
         self.name = name
         self.type = etype
-        self.is_negated = Parameter(self, 'is_negated', False)
+        self.is_negated = NegatedParameter(self, 'is_negated', False)
         #other possibility:
         #self.params = {'is_negated' : Parameter(self, 'is_negated', False)}
 
@@ -27,13 +27,10 @@ class Effect:
     def can_prevent_activation_attempt(self, in_activate_or_resolve):
         return False
 
-    def unaffected_by(self, effect, gamestate):
-        return False
-
-    def check_if_subject_is_affected(self, subject, gamestate):
+    def affects_card(self, card, gamestate):
         affected = True
-        for effect in subject.effects:
-            if effect.unaffected_by(self, gamestate):
+        for unaffected_function in card.unaffected.get_value(gamestate):
+            if unaffected_function(self, gamestate):
                 affected = False
                 break
 
@@ -99,19 +96,38 @@ class FlipEffect(Effect):
     def RemoveADCEventFromTriggerEvents(self, gamestate):
         gamestate.trigger_events.remove(self.ADC_event)
 
+
+#Todo : remake Unaffected and CantBeTargeted as card Parameters
+#card effects apply modifiers to those parameters.
+
+#in progress for Unaffected
+
 class UnaffectedByTrap(Effect):
     def __init__(self):
         super().__init__("ImmuneToTrap", "Immune")
     
     def init(self, gamestate, card):
         self.card = card
+
+        UnaffectedByTrapModifier = ContinuousUnaffectedModifier(self, None, 
+                                    self.add_ubt_to_unaff_func_list, self.unaffected_by_trap, None, 0)
+
+        self.card.unaffected.local_modifiers.append(UnaffectedByTrapModifier)
         
+        
+    def add_ubt_to_unaff_func_list(self, card, orig_list):
+        new_list = orig_list
+        new_list.append(self.unaffected_by_trap)
+        return new_list
+
     #do not block actions and effects at time of activating
-    def unaffected_by(self, effect, gamestate):
-        if effect.parent_card.cardclass == "Trap" and self.is_negated.get_value(gamestate) == False:
-            return True
-        else:
-            return False
+    def unaffected_by_trap(self, effect, gamestate):
+        unaffected = False
+        if effect.parent_card.cardclass == "Trap":
+            unaffected = True
+    
+        return unaffected
+            
 
 
 class CantBeTargetedByTrap(Effect):
@@ -122,8 +138,9 @@ class CantBeTargetedByTrap(Effect):
         self.card = card
         self.is_negated = False
 
-    def blocks_action(self, action):
-        if action.parent_effect.parent_card.cardclass == "Trap" and action.__class__.__name__ == "Target":
+    def blocks_action(self, action, gamestate):
+        is_negated = self.is_negated.get_value(gamestate)
+        if action.parent_effect.parent_card.cardclass == "Trap" and action.__class__.__name__ == "Target" and is_negated == False:
             return True
         else:
             return False

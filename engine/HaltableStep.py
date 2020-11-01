@@ -378,8 +378,8 @@ class ProcessCCZModifiers(HaltableStep):
             #lingering effects can't become negated or blocked by unaffectation
             check_for_negated_and_unaffected = True
             if modifier.is_continuous:
-                is_not_negated = modifier.check_for_negated(gamestate)
-                target_is_affected = modifier.check_for_unaffected(self.parentAction.args['card'], gamestate)
+                is_not_negated = modifier.is_not_negated(gamestate)
+                target_is_affected = modifier.affects_card(self.parentAction.args['card'], gamestate)
                 check_for_negated_and_unaffected = is_not_negated and target_is_affected
 
             if modifier.matches(self.parentAction, gamestate) and check_for_negated_and_unaffected and not monster_with_gained_effect_leaving_field:

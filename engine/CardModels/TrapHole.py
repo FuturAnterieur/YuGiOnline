@@ -91,7 +91,7 @@ class TrapHoleEffect(Effect):
         return self.args['target'] is not None and self.args['target'].face_up == True and self.args['target'].location == "Field" and self.args['target'].attack >= 1000
 
     def Resolve(self, gamestate):
-        if not self.is_negated.get_value(gamestate) and self.check_if_target_still_valid() and self.check_if_subject_is_affected(self.args['target'], gamestate):
+        if not self.is_negated.get_value(gamestate) and self.check_if_target_still_valid() and self.affects_card(self.args['target'], gamestate):
             
             DestroyAction = engine.Action.ChangeCardZone()
             DestroyAction.init(engine.Action.CCZDESTROY, self.args['target'], CAUSE_EFFECT, self, False, True)

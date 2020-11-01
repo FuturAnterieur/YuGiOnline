@@ -1,6 +1,8 @@
 import engine.Effect as Effect
 import engine.Action as Action
 import engine.ActionsSpellTrap as ActionsSpellTrap
+import engine.Parameter as Parameter
+
 from engine.defs import FACEDOWN
 
 
@@ -13,6 +15,8 @@ class Card:
         self.text = text
         self.cardclass = cardclass
         self.imgpath = imgpath
+
+        self.unaffected = Parameter(self, 'Unaffected', [])
 
         self.owner = owner
         self.location = ""
