@@ -11,8 +11,8 @@ from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, SCOP
 
 class MacroCosmosPassiveEffect(PassiveEffect):
     
-    def init(self, gamestate, card):
-        super().init(card)
+    def __init__(self, name, etype, gamestate, card):
+        super().__init__(name, etype, card)
         self.spellspeed = 2
 
         self.intercepted_action = None

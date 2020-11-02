@@ -3,24 +3,23 @@ import engine.Action
 from engine.Event import Event
 import engine.Bans
 
-from engine.Parameter import Parameter, ContinuousModifier
+from engine.Parameter import Parameter, UnaffectedModifier
 
 from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, CAUSE_EFFECT
 
 class Effect:
-    def __init__(self, name, etype):
+    def __init__(self, name, etype, parent_card):
+        self.parent_card = parent_card
         self.name = name
         self.type = etype
-        self.is_negated = NegatedParameter(self, 'is_negated', False)
+        self.is_negated = Parameter(self, 'is_negated', False)
         #other possibility:
         #self.params = {'is_negated' : Parameter(self, 'is_negated', False)}
 
         self.ActivateActionInfoList = []
         self.ResolveActionLInfoList = []
 
-    def init(self, parent_card):
-        self.parent_card = parent_card
-
+    
     def blocks_action(self, action, gamestate):
         return False
 
@@ -77,13 +76,10 @@ class Effect:
 
 
 class PassiveEffect(Effect):
-    def __init__(self, name, etype):
-        super().__init__(name, etype)
+    def __init__(self, name, etype, parent_card):
+        super().__init__(name, etype, parent_card)
         self.is_on = False
         
-    def init(self, parent_card):
-        super().init(parent_card)
-
 
 def MatchOnADC(action, gamestate):
     return action.__class__.__name__ == "AfterDamageCalculationEvents"
@@ -109,8 +105,8 @@ class UnaffectedByTrap(Effect):
     def init(self, gamestate, card):
         self.card = card
 
-        UnaffectedByTrapModifier = ContinuousUnaffectedModifier(self, None, 
-                                    self.add_ubt_to_unaff_func_list, self.unaffected_by_trap, None, 0)
+        UnaffectedByTrapModifier = UnaffectedModifier(self, None, 
+                                    self.add_ubt_to_unaff_func_list, self.unaffected_by_trap, True)
 
         self.card.unaffected.local_modifiers.append(UnaffectedByTrapModifier)
         
@@ -151,16 +147,13 @@ class CantBeTargetedByTrap(Effect):
 
 def getContinuousCardTurnOnEffectClass(name, passive_effect_class, spellspeed):
     class ContinuousCardTurnOnEffect(Effect):
-        def __init__(self):
-            super().__init__(name, "Trap")
+        def __init__(self, gamestate, card):
+            super().__init__(name, "Trap", card)
             self.PassiveEffectClass = passive_effect_class
             self.spellspeed = spellspeed
 
-        def init(self, gamestate, card):
-            super().init(card)
-            self.passive_effect = self.PassiveEffectClass(name, "Passive")
-            self.passive_effect.init(gamestate, card)
-
+            self.passive_effect = self.PassiveEffectClass(name, "Passive", gamestate, card)
+            
             self.TurnOffEvent = Event("PETO", self.parent_card, self, None, "immediate", "", self.MatchPETurnOff)
             self.TurnOffEvent.funclist.append(self.OnPETurnOff)
 

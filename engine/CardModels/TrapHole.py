@@ -9,11 +9,9 @@ from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, CAUS
 
 
 class TrapHoleEffect(Effect):
-    def __init__(self):
-        super(TrapHoleEffect, self).__init__("TrapHoleEffect", "Trap")
+    def __init__(self, gamestate, card):
+        super().__init__("TrapHoleEffect", "Trap", card)
         
-    def init(self, gamestate, card):
-        super().init(card)
         self.spellspeed = 2
         self.SummonedMonster = None
 

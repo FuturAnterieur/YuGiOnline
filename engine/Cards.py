@@ -16,7 +16,7 @@ class Card:
         self.cardclass = cardclass
         self.imgpath = imgpath
 
-        self.unaffected = Parameter(self, 'Unaffected', [])
+        self.unaffected = Parameter.Parameter(self, 'Unaffected', [])
 
         self.owner = owner
         self.location = ""
@@ -65,10 +65,10 @@ class MonsterCard(Card):
         self.actiondict["Attack"].init(self)
         
         for effect_class in self.effects_classes:
-            self.effects.append(effect_class())
+            self.effects.append(effect_class(gamestate, self))
             if self.effects[-1].type == "Ignition":
                 self.actiondict["Activate Effect"] = Action.ActivateMonsterEffect()
-                self.actiondict["Activate Effect"].init(gamestate, self, self.effect)
+                self.actiondict["Activate Effect"].init(gamestate, self, self.effects[-1])
 
 
 class NormalMonsterCard(MonsterCard):
@@ -85,10 +85,10 @@ class SpellTrapCard(Card):
         super().__init__(name, text, "Spell/Trap", imgpath, ID, owner, gamestate)
         self.wassetthisturn = False
         self.spelltrapsubclass = subclass
-        self.effects = [effect_class()]
+        self.effects = [effect_class(gamestate, self)]
         self.actiondict["Set"] = ActionsSpellTrap.SetSpellTrap()
         self.actiondict["Set"].init(self)
-        self.effects[0].init(gamestate, self)
+        
         
         
 class TrapCard(SpellTrapCard):

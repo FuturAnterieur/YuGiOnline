@@ -2,6 +2,7 @@
 
 #and maybe for managing effect negation too
 
+from engine.defs import UNAFFECTED
 
 class CancellationNode:
     def __init__(self, modifier, affected_card):
@@ -54,8 +55,10 @@ def find_adjacent_nodes(graph, node, previous_card, gamestate):
                 elif affected_card == previous_card and modifier.mod_type != UNAFFECTED:
                     condition = unaffmod_unaffs_modifier
 
-                else: #an unaff modifier cannot go negate effects applying to other cards
+                else: 
                     condition = False
+                    #this is to prevent unaffected modifiers from causing a card to become
+                    #negated by unaffected modifiers applying to other cards
 
                 if condition:
                     newnode = CancellationNode(unaffmod, previous_card)
@@ -109,7 +112,7 @@ class Parameter:
         all_modifiers = []
         for modifier in gamestate.modifiers:
             if modifier.matches(self, gamestate):
-                all_modifiers.append(modifier):
+                all_modifiers.append(modifier)
 
         all_modifiers.extend(self.local_modifiers)
 
@@ -122,60 +125,20 @@ class Parameter:
     
 
 class Modifier:
-    def __init__(self, parent_effect, matches, function, is_continuous, priority, mtype):
+    def __init__(self, parent_effect, matches, function, is_continuous, mtype):
         self.parent_effect = parent_effect
         self.matches = matches
         self.function = function
         self.is_continuous = is_continuous
-        self.priority = priority
-        self.mtype = mtype
+        self.mod_type = mtype
 
-    def check_for_negated(self, gamestate):
-        return True
-
-    def check_for_unaffected(self, card, gamestate):
-        return True
-
-    def check_for_unaffected_and_negated(self, gamestate):
-        return True
-
-
-class ContinuousModifier(Modifier):
-    def __init__(self, parent_effect, matches, function, priority):
-        super().__init__(parent_effect, matches, function, True, priority)
-    
-    
-    def update_unaffected_on_card(self, pcard):
-        for modifier in pcard.unaffected.get_active_modifiers():
-            if modifier.unaffected_function(self.parent_effect):
-                self.annulators[pcard].append(modifier)
-
-    def is_not_negated(self, gamestate):
-        return not self.parent_effect.is_negated.get_value(gamestate)
-
-    def affects_card(self, card, gamestate):
-        return self.parent_effect.affects_card(card, gamestate)
-
-    def check_for_unaffected_and_negated(self, card, gamestate):
-        return self.check_for_negated(gamestate) and self.check_for_unaffected(card, gamestate)
 
 class UnaffectedModifier(Modifier):
-    def __init__(self, parent_effect, matches, function, unaff_func, priority):
-        super().__init__(parent_effect, matches, function, priority)
+    def __init__(self, parent_effect, matches, function, unaff_func, is_continuous):
+        super().__init__(parent_effect, matches, function, is_continuous, UNAFFECTED)
         self.unaff_func = unaff_func
         
 
-
-
-class LingeringModifier(Modifier):
-    #this modifier's checks are ran at the time of trying to apply the effect (at resolution), in the effect's class,
-    #and not afterwards. So in this class, all checks return True.
-    def is_not_negated(self, gamestate):
-        return True
-
-    def affects_card(self, pcard):
-        return True
-    
 
 class CCZModifier(Modifier):
     def __init__(self, name, parent_card, parent_effect, scope_indicator, is_continuous, matches, function):

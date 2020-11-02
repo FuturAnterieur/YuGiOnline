@@ -4,11 +4,8 @@ from engine.defs import CAUSE_EFFECT, STATE_ACTIVATE, STATE_RESOLVE
 from engine.Cards import QuickPlaySpellCard
 
 class MysticalSpaceTyphoonEffect(Effect):
-    def __init__(self):
-        super().__init__("MysticalSpaceTyphoonEffect", "Quick-Spell")
-
-    def init(self, gamestate, card):
-        super().init(card)
+    def __init__(self, gamestate, card):
+        super().__init__("MysticalSpaceTyphoonEffect", "Quick-Spell", card)
         self.spellspeed = 2
         self.args = {'targeted_spelltrap' : None, 'potential_targets' : []}
 

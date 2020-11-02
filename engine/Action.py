@@ -1120,6 +1120,7 @@ class BeforeDamageCalculationEvents(DamageStepEventAction):
 
 class DuringDamageCalculation(Action):
     def init(self, ds_action):
+        self.name = "DuringDamageCalculation"
         self.ds_action = ds_action
         self.args = ds_action.args
 
@@ -1150,6 +1151,7 @@ class DuringDamageCalculation(Action):
 
 class MonstersMarkedEventsForAll(Action):
     def init(self, ds_action):
+        self.name = "MonstersMarkedEventsForAll"
         self.ds_action = ds_action
         self.args = ds_action.args
 
@@ -1193,6 +1195,7 @@ class EndOfDamageStepEvents(DamageStepEventAction):
 
 class BattleSendsMonstersToGraveyard(Action):
     def init(self, ds_action):
+        self.name = "Battle sends monsters to graveyard"
         self.ds_action = ds_action
         self.args = ds_action.args
 
