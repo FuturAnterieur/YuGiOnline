@@ -50,7 +50,7 @@ The system was only tested on Windows up to now.
 - The different steps of the battle phase
 - Support for creating effects that can respond to each other
 - End of duel, including the groundwork for situations where a draw occurs
-- A few monsters and one trap card, Trap Hole, have been coded
+- A few monsters and three cards have been coded. So far, there's Trap Hole, Mystical Space Typhoon and Macro Cosmos's banish effect.
 
 ## Notable things that are not implemented yet
 

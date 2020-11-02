@@ -102,7 +102,7 @@ class Parameter:
             if cancel_graph.start_node.is_active():
                 applicable_modifiers.append(modifier)
 
-        for modifier in self.applicable_modifiers:
+        for modifier in applicable_modifiers:
             value = modifier.function(self, value)
 
         return value
@@ -151,8 +151,8 @@ class CCZModifier(Modifier):
         self.was_gained = False
         self.is_continuous = is_continuous
 
-    def check_for_negated(self, gamestate):
+    def is_not_negated(self, gamestate):
         return not self.parent_effect.is_negated.get_value(gamestate)
 
-    def check_for_unaffected(self, targetcard, gamestate):
-        return self.parent_effect.check_if_subject_is_affected(targetcard, gamestate)
+    def affects_card(self, targetcard, gamestate):
+        return self.parent_effect.affects_card(targetcard, gamestate)
