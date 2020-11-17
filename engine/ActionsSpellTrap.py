@@ -271,8 +271,8 @@ class ResolveEffectCore(Action):
         list_of_steps = [engine.HaltableStep.ClearLRAIfRecording(self),
                          engine.HaltableStep.ProcessTriggerEvents(self),
                          engine.HaltableStep.RunImmediateEvents(self), #for 'an effect is resolving' (see Abyss-scale of the Kraken)
-                         engine.HaltableStep.CallEffectResolve(self, 'effect'), #the Effect Resolve will call its own trigger-setting steps
-                         engine.HaltableStep.AppendToLRAIfRecording(self)] 
+                         engine.HaltableStep.AppendToLRAIfRecording(self),
+                         engine.HaltableStep.CallEffectResolve(self, 'effect')] #the Effect Resolve will call its own trigger-setting steps
                          #engine.HaltableStep.ProcessTriggerEvents(self),
                          #engine.HaltableStep.AppendToLRAIfRecording(self), #for the actual action of resolving the card
                          #engine.HaltableStep.RunImmediateEvents(self)]

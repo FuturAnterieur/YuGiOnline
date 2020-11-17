@@ -5,7 +5,7 @@ import engine.Action
 from engine.Event import Event
 import engine.Bans
 
-from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, CAUSE_EFFECT, STATE_ACTIVATE, STATE_RESOLVE
+from engine.defs import CCZDESTROY, CCZBANISH, CCZDISCARD, CCZRETURNTOHAND, CAUSE_EFFECT, STATE_ACTIVATE, STATE_RESOLVE, FACEUPTOEVERYONE
 
 
 class TrapHoleEffect(Effect):
@@ -15,8 +15,7 @@ class TrapHoleEffect(Effect):
         self.spellspeed = 2
         self.SummonedMonster = None
 
-        self.potential_target = None
-        self.args = {'target' : None}
+        self.args = {'potential_target' : None, 'target' : None}
 
         self.effect_event = Event("TrapHoleEvent", self.parent_card, self, [self.parent_card.actiondict, "Activate"], "respond", "OFast", self.MatchOnTHCompatibleSummon)
         self.effect_event.funclist.append(self.LaunchNormalTrapActivationForTH)
@@ -49,8 +48,8 @@ class TrapHoleEffect(Effect):
 
     def MatchOnTHCompatibleSummon(self, action, gamestate):
         result = False
-        if action.name == "Normal Summon Monster" and action.card.face_up == True and action.card.attack >= 1000:
-            self.potential_target = action.card
+        if action.name == "Normal Summon Monster" and action.card.face_up == FACEUPTOEVERYONE and action.card.attack >= 1000:
+            self.args['potential_target'] = action.card
             result = True
 
         return result
@@ -65,11 +64,17 @@ class TrapHoleEffect(Effect):
 
         result = False
         #do the check for the Activate's Target action too
+        #being unaffected cannot prevent an effect from being activated
         print("reqs found valid target. Checking blocks and bans...")
+        HypotheticalTargetAction = engine.Action.Target()
+        HypotheticalTargetAction.init(self.parent_card, [], self, 'target')
+        HypotheticalTargetAction.args['chosen_target'] = self.args['potential_target']
+
         HypotheticalDestroyAction = engine.Action.ChangeCardZone()
-        HypotheticalDestroyAction.init(engine.Action.CCZDESTROY, self.potential_target, False, self)
+        HypotheticalDestroyAction.init(engine.Action.CCZDESTROY, self.args['potential_target'], False, self)
         
-        action_desc_list = [{'action' : HypotheticalDestroyAction, 'card' : self.potential_target, 'in_activate_or_resolve' : STATE_ACTIVATE}]
+        action_desc_list = [{'action' : HypotheticalDestroyAction, 'card' : self.args['potential_target'], 'in_activate_or_resolve' : STATE_RESOLVE},
+                {'action' : HypotheticalTargetAction, 'card' : self.args['potential_target'], 'in_activate_or_resolve' : STATE_ACTIVATE}]
         if self.check_if_activation_is_allowed(action_desc_list, gamestate):
             print("Blocks and bans test passed. Target is valid.")
             result = True
@@ -83,20 +88,26 @@ class TrapHoleEffect(Effect):
         #Actually, according to the card text, only one target is possible (if another monster is summoned,
         #the first one misses the timing, I think).  
 
-        self.args['target'] = self.potential_target
+        self.args['target'] = self.args['potential_target']
         
     def check_if_target_still_valid(self):
-        return self.args['target'] is not None and self.args['target'].face_up == True and self.args['target'].location == "Field" and self.args['target'].attack >= 1000
+        return self.args['target'] is not None and self.args['target'].face_up == FACEUPTOEVERYONE and self.args['target'].location == "Field" and self.args['target'].attack >= 1000
 
     def Resolve(self, gamestate):
+        print(self.is_negated.get_value(gamestate))
+        print(self.check_if_target_still_valid())
+        print(self.affects_card(self.args['target'], gamestate))
+
         if not self.is_negated.get_value(gamestate) and self.check_if_target_still_valid() and self.affects_card(self.args['target'], gamestate):
-            
+            print("Trap Hole neg/unaff test passed")
+
             DestroyAction = engine.Action.ChangeCardZone()
             DestroyAction.init(engine.Action.CCZDESTROY, self.args['target'], CAUSE_EFFECT, self, False, True)
         
             action_desc_list = [{'action': DestroyAction, 'card': self.args['target']}]
 
             if self.check_if_resolve_is_blocked(action_desc_list, gamestate):
+                print("Block test passed. Trap Hole Resolve will be called.")
                 DestroyAction.run(gamestate)
 
 

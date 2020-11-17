@@ -18,7 +18,7 @@ class CancellationGraph:
     def __init__(self, start_modifier, start_card):
         self.nodes = []
         self.start_node = CancellationNode(start_modifier, start_card)
-        self.nodes.append(start_node)
+        self.nodes.append(self.start_node)
 
 
 def find_adjacent_nodes(graph, node, previous_card, gamestate):
@@ -86,19 +86,23 @@ class Parameter:
         else:
             self.parent_card = parent_object
 
+        #todo: an Unaffected parameter loses (at least) its acquired modifiers when its parent card leaves the field 
+        #same goes for other card modifiers
+        #what i'm not sure about is how it works for an effect's  is_Negated parameter
     def apply_modifiers(self, gamestate):
         
         value = self.base_value
         applicable_modifiers = []
 
         for modifier in gamestate.modifiers:
+            
             if modifier.matches(self, gamestate):
-                cancel_graph = build_cancellation_graph(modifier, self.parent_card)
+                cancel_graph = build_cancellation_graph(modifier, self.parent_card, gamestate)
                 if cancel_graph.start_node.is_active():
                     applicable_modifiers.append(modifier)
                     
-        for modifier in self.local_modifiers:           
-            cancel_graph = build_cancellation_graph(modifier, self.parent_card)
+        for modifier in self.local_modifiers:
+            cancel_graph = build_cancellation_graph(modifier, self.parent_card, gamestate)
             if cancel_graph.start_node.is_active():
                 applicable_modifiers.append(modifier)
 
@@ -114,7 +118,9 @@ class Parameter:
             if modifier.matches(self, gamestate):
                 all_modifiers.append(modifier)
 
-        all_modifiers.extend(self.local_modifiers)
+        for modifier in self.local_modifiers:
+            all_modifiers.append(modifier)
+            
 
         return all_modifiers
 
@@ -132,12 +138,19 @@ class Modifier:
         self.is_continuous = is_continuous
         self.mod_type = mtype
 
+    def get_priority(self):
+        return self.parent_effect.spellspeed
+
 
 class UnaffectedModifier(Modifier):
-    def __init__(self, parent_effect, matches, function, unaff_func, is_continuous):
-        super().__init__(parent_effect, matches, function, is_continuous, UNAFFECTED)
+    def __init__(self, parent_effect, matches, unaff_func, is_continuous):
+        super().__init__(parent_effect, matches, self.add_unaff_func_to_funclist, is_continuous, UNAFFECTED)
         self.unaff_func = unaff_func
-        
+
+    def add_unaff_func_to_funclist(self, card, orig_list):
+        new_list = orig_list
+        new_list.append(self.unaff_func)
+        return new_list
 
 
 class CCZModifier(Modifier):

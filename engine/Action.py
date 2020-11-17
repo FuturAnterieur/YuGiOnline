@@ -348,6 +348,42 @@ class  TurnOffPassiveEffects(Action):
 
     run_func = default_run
 
+class RemoveAcquiredModifiers(Action):
+    def init(self, card, zone):
+        super().init('Utility effect deactivation for leaving ' + zone.type, card)
+        self.args = {}
+        self.zone = zone
+        self.card = card
+
+    def default_run(self, gamestate):
+        los = steps_for_event_pre_action(self, gamestate)
+        self.run_steps(gamestate, los)
+
+        # basically what it should do is this
+        if self.zone.type == "Field":
+            for parameter in self.card.parameters:
+                modifiers_to_remove = []
+                for modifier in parameter.local_modifiers:
+                    if modifier.lost_when_leave_field or modifier.was_gained:
+                        modifiers_to_remove.append(modifier)
+
+                for modifier in modifiers_to_remove:
+                    parameter.local_modifiers.remove(modifier)
+
+            ccz_mods_to_remove = []
+            for modifier in self.card.CCZModifiers:
+                if modifier.was_gained:
+                    ccz_mods_to_remove.append(modifier)
+
+            for mod in ccz_mods_to_remove:
+                self.card.CCZModifiers.remove(mod)
+
+
+            
+
+    run_func = default_run
+
+        
 
 
 #attempt to merge Destroy, Banish, Discard and Return To Hand in a single, at-run-time modifiable action
@@ -376,16 +412,45 @@ class ChangeCardZone(Action):
         self.is_contained = is_contained
         self.with_leave_zone_trigger = with_leave_zone_trigger
         self.parent_effect = parent_effect
-        
+    
+    def get_pre_steps(self):
+
+        clear_lra_step = engine.HaltableStep.DoNothing(self) if self.is_contained else engine.HaltableStep.ClearLRAIfRecording(self)
+        los = [clear_lra_step,
+                engine.HaltableStep.InitAndRunAction(self, TurnOffPassiveEffects, 'card', 'fromzone'),
+                engine.HaltableStep.InitAndRunAction(self, RemoveAcquiredModifiers, 'card', 'fromzone')]
+
+        return los
+
+    def get_main_steps(self):
+        lzt_step = engine.HaltableStep.InitAndRunAction(self, CardLeavesZoneEvents, 'card', 'fromzone') if self.with_leave_zone_trigger else engine.HaltableStep.DoNothing(self)
+        los = [engine.HaltableStep.ProcessCCZModifiers(self),
+                            engine.HaltableStep.RunStepIfCondition(self, 
+                                    engine.HaltableStep.ChangeCardVisibility(self, ['owner', 'other'], 'card', "1"),
+                                    DestinationIsGYOrBanished, 'tozone'),
+                            engine.HaltableStep.MoveCard(self, 'card', 'tozone'),
+                            engine.HaltableStep.RunStepIfCondition(self, 
+                                    engine.HaltableStep.EraseCard(self, 'card'),
+                                    DestinationIsGYOrBanished, 'tozone'),
+                            engine.HaltableStep.ChangeCardZoneServer(self, 'card', 'tozone'),
+                            lzt_step,
+                            engine.HaltableStep.InitAndRunAction(self, CardSentToZoneEvents, 'card', 'tozone'),
+                            engine.HaltableStep.ProcessTriggerEvents(self),
+                            engine.HaltableStep.AppendToLRAIfRecording(self),
+                            engine.HaltableStep.RunImmediateEvents(self)]
+        return los
+
+    
     def default_run(self, gamestate):
         
         clear_lra_step = engine.HaltableStep.DoNothing(self) if self.is_contained else engine.HaltableStep.ClearLRAIfRecording(self)
         lzt_step = engine.HaltableStep.InitAndRunAction(self, CardLeavesZoneEvents, 'card', 'fromzone') if self.with_leave_zone_trigger else engine.HaltableStep.DoNothing(self)
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                             clear_lra_step,
-                            engine.HaltableStep.ProcessCCZModifiers(self),
                             engine.HaltableStep.InitAndRunAction(self, TurnOffPassiveEffects, 'card', 'fromzone'),
+                            engine.HaltableStep.InitAndRunAction(self, RemoveAcquiredModifiers, 'card', 'fromzone'),
                             #for deactivating cards when they leave the field, mostly
+                            engine.HaltableStep.ProcessCCZModifiers(self),
                             engine.HaltableStep.RunStepIfCondition(self, 
                                     engine.HaltableStep.ChangeCardVisibility(self, ['owner', 'other'], 'card', "1"),
                                     DestinationIsGYOrBanished, 'tozone'),
@@ -410,6 +475,48 @@ class ChangeCardZone(Action):
 
         gamestate.run_steps()
 
+
+    run_func = default_run
+
+class GroupCCZ(Action):
+    def init(self, name, cards, cause, parent_effect = None, is_contained = False, with_leave_zone_trigger = True):
+        
+        self.intended_action = name
+        self.intended_tozone = tozone 
+        self.args = {'this_action' : self}
+        
+        self.num_cards = len(cards)
+
+        self.cards = cards
+        
+        self.is_contained = is_contained
+        self.with_leave_zone_trigger = with_leave_zone_trigger
+        self.parent_effect = parent_effect
+        self.cause = cause
+
+    def default_run(self, gamestate):
+        #TurnOffPassiveEffects and RemoveAcquiredModifiers for all cards before all cards are sent elsewhere
+        clear_lra_step = engine.HaltableStep.DoNothing(self) if self.is_contained else engine.HaltableStep.ClearLRAIfRecording(self)
+        
+        los = [engine.HaltableStep.AppendToActionStack(self), clear_lra_step]
+        ccz_actions = []
+
+        for i in range(self.num_cards):
+            ccz_actions.append(ChangeCardZone())
+            ccz_actions[-1].init(self.name, self.cards[i], self.cause, self.parent_effect, True, self.with_leave_zone_trigger)
+        
+        for i in range(self.num_cards):
+            los.extend(ccz_actions[i].get_pre_steps())
+
+        for i in range(self.num_cards):
+            los.extend(ccz_actions[i].get_main_steps())
+
+        los.extend([engine.HaltableStep.RunStepIfCondition(self, 
+                                engine.HaltableStep.RunAction(self, RunEvents(self.name)), RunEventsCondition),
+                            engine.HaltableStep.PopActionStack(self),
+                            engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunMAWsAtEnd()), ActionStackEmpty)])
+
+        self.run_steps(gamestate, los)
 
     run_func = default_run
 

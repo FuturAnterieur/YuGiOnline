@@ -532,18 +532,12 @@ var CardManager = {
 			this.moveList.push({card: theCard, tl: mainTargetLocation, completed: false});
 		}
 
-		for(var i = 0; i < spliced_position; i++)
+		for(var i = 0; i < newNumCardsInHand; i++)
 		{
-			this.moveList.push({card: this.cardsInHands[whichHand][spliced_position - i - 1], 
-			       		tl: this.getCardInHandPos(whichHand, newNumCardsInHand, spliced_position - i)});
+			this.moveList.push({card: this.cardsInHands[whichHand][i], 
+			       		tl: this.getCardInHandPos(whichHand, newNumCardsInHand, i)});
 		}
 
-		for(var j = spliced_position; j < newNumCardsInHand; j++)
-		{
-			       this.moveList.push({card: this.cardsInHands[whichHand][j],
-			       				tl: this.getCardInHandPos(whichHand, newNumCardsInHand, j)});
-
-		}
  	     }
 
 	     else if (zoneId == "0_Hand" || zoneId == "1_Hand")
@@ -584,7 +578,7 @@ var CardManager = {
 	else
 	{
 		whichHand = 'his';
-		this.numcards_in_his_hand -= 1;
+		this.numcards_in_his_hand += 1;
 	}	
 	
 	this.cardsInHands[whichHand].push(theCard);
@@ -605,20 +599,21 @@ var CardManager = {
 	var handCenter = this.Zones[whichHand]["Hand"];
 	var centerIndex;
 	var centerCardXPos;
+	var sign = whichHand == "my" ? 1 : -1;
 
-	if (newNumCardsInHand % 2 == 1)
+	if (newNumCardsInHand % 2 == 1 || newNumCardsInHand == 0)
 	{
 	    centerIndex = Math.floor(newNumCardsInHand / 2);
 	    centerCardXPos = handCenter.x - CardManager.cardWidth/2;
 	}
 	else
 	{
-	    centerIndex = newNumCardsInHand / 2;
+	    var persCorr = whichHand == "his" ? -1 : 0;
+	    centerIndex = newNumCardsInHand / 2 + persCorr;
 	    centerCardXPos = handCenter.x;
 	}
 
 	var indexDelta = index - centerIndex;
-	var sign = whichHand == "my" ? 1 : -1;
 	var cardXPos = centerCardXPos + (indexDelta * sign * (CardManager.cardWidth + 5));
 
 	return new Coords(cardXPos, handCenter.y);

@@ -75,6 +75,10 @@ class Effect:
         return unbanned and unblocked
 
 
+def MatchTurnSwitch(gamestate):
+    return gamestate.curphase == "turn_switch"
+
+
 class PassiveEffect(Effect):
     def __init__(self, name, etype, parent_card):
         super().__init__(name, etype, parent_card)
@@ -99,27 +103,16 @@ class FlipEffect(Effect):
 #in progress for Unaffected
 
 class UnaffectedByTrap(Effect):
-    def __init__(self):
-        super().__init__("ImmuneToTrap", "Immune")
-    
-    def init(self, gamestate, card):
+    def __init__(self, gamestate, card):
+        super().__init__("ImmuneToTrap", "Immune", card)
         self.card = card
-
-        UnaffectedByTrapModifier = UnaffectedModifier(self, None, 
-                                    self.add_ubt_to_unaff_func_list, self.unaffected_by_trap, True)
-
+        UnaffectedByTrapModifier = UnaffectedModifier(self, None,  self.unaffected_by_trap, True)
         self.card.unaffected.local_modifiers.append(UnaffectedByTrapModifier)
         
-        
-    def add_ubt_to_unaff_func_list(self, card, orig_list):
-        new_list = orig_list
-        new_list.append(self.unaffected_by_trap)
-        return new_list
 
-    #do not block actions and effects at time of activating
     def unaffected_by_trap(self, effect, gamestate):
         unaffected = False
-        if effect.parent_card.cardclass == "Trap":
+        if effect.parent_card.cardclass == "Spell/Trap" and effect.parent_card.spelltrapsubclass == "Trap":
             unaffected = True
     
         return unaffected
@@ -128,11 +121,7 @@ class UnaffectedByTrap(Effect):
 
 class CantBeTargetedByTrap(Effect):
     def __init__(self):
-        super().__init__("CBTbTrap", "CantBeTargeted")
-
-    def init(self, gamestate, card):
-        self.card = card
-        self.is_negated = False
+        super().__init__("CBTbTrap", "CantBeTargeted", card)
 
     def blocks_action(self, action, gamestate):
         is_negated = self.is_negated.get_value(gamestate)

@@ -370,22 +370,45 @@ class ProcessCCZModifiers(HaltableStep):
         #the destination to the same value
 
         #and anyway only one can win
+            
+
+        #this code does not take into account the recent modification of placing TurnOffPassiveEffects before ProcessCCZModifiers.     
+        if self.parentAction.args['fromzone'].type == "Field":
+            self.parentAction.args['card'].location = "is_leaving_field"
+
         applicable_modifiers = []
         counter = 0
-        for modifier in gamestate.CCZModifiers:
-            monster_with_gained_effect_leaving_field = self.parentAction.args['card'] == modifier.parent_card and self.parentAction.args['fromzone'].type == "Field" and modifier.was_gained == True
 
-            #lingering effects can't become negated or blocked by unaffectation
+        for modifier in self.parentAction.args['card'].CCZModifiers:
             check_for_negated_and_unaffected = True
             if modifier.is_continuous:
                 is_not_negated = modifier.is_not_negated(gamestate)
                 target_is_affected = modifier.affects_card(self.parentAction.args['card'], gamestate)
                 check_for_negated_and_unaffected = is_not_negated and target_is_affected
 
-            if modifier.matches(self.parentAction, gamestate) and check_for_negated_and_unaffected and not monster_with_gained_effect_leaving_field:
+            if check_for_negated_and_unaffected:
                 applicable_modifiers.append(modifier)
-                modifier.pos_in_modifier_list = counter
-                counter += 1
+
+        if len(applicable_modifiers) == 0:
+            for modifier in gamestate.CCZModifiers:
+                #parent_card_leaving_field = self.parentAction.args['card'] == modifier.parent_card and self.parentAction.args['card'].location == "is_leaving_field"
+                #monster_with_gained_cczmod_leaving_field = parent_card_leaving_field and modifier.was_gained == True
+                #global_modifier_leaving_field = parent_card_leaving_field and modifier.scope_indicator == SCOPE_GLOBAL
+                #those will already have been removed in TurnOffPassiveEffects. 
+                #LOCAL CCZ modifiers don't get turned off at RemoveAcquiredModifiers
+                #unless they were gained.
+
+                #lingering effects can't become negated or blocked by unaffectation
+                check_for_negated_and_unaffected = True
+                if modifier.is_continuous:
+                    is_not_negated = modifier.is_not_negated(gamestate)
+                    target_is_affected = modifier.affects_card(self.parentAction.args['card'], gamestate)
+                    check_for_negated_and_unaffected = is_not_negated and target_is_affected
+
+                if modifier.matches(self.parentAction, gamestate) and check_for_negated_and_unaffected:
+                    applicable_modifiers.append(modifier)
+                    modifier.pos_in_modifier_list = counter
+                    counter += 1
 
         def keyfunc(modifier):
             return 10*modifier.scope_indicator + modifier.parent_effect.spellspeed
@@ -402,8 +425,8 @@ class ProcessCCZModifiers(HaltableStep):
 
             unbanned = True
             for ban in gamestate.bans:
-                parent_card_is_leaving_field = self.parentAction.args['card'] == ban.parent_card and self.parentAction.args['fromzone'].type == "Field"
-                if ban.bans_action(self.parentAction, gamestate) and not parent_card_is_leaving_field:
+                #parent_card_is_leaving_field = self.parentAction.args['card'] == ban.parent_card and self.parentAction.args['fromzone'].type == "Field"
+                if ban.bans_action(self.parentAction, gamestate):
                     unbanned = False
                     break
 
@@ -470,6 +493,10 @@ class NSMCServer(HaltableStep): #NormalSummonMonsterCoreServer
         player.hand.remove_card(summonedmonster)
         player.monsterzones.add_card(summonedmonster, self.args[self.zan].zonenum)
         summonedmonster.position = self.args[self.pan]
+        if self.args[self.pan] == "ATK":
+            summonedmonster.face_up = FACEUPTOEVERYONE
+        else:
+            summonedmonster.face_up = FACEDOWN
         
 class SetSpellTrapServer(HaltableStep):
     def __init__(self, pA, card_arg_name, chosen_zone_arg_name):
@@ -874,6 +901,14 @@ class RunDrawPhase(HaltableStep):
 
     def run(self, gamestate):
         gamestate.draw_phase()
+
+class RunInitialDraw(HaltableStep):
+    def __init__(self, player):
+        super().__init__(None)
+        self.player = player
+
+    def run(self, gamestate):
+        gamestate.initial_draw(self.player)
 
 class RunStandbyPhase(HaltableStep):
     def __init__(self):

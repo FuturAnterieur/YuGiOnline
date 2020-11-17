@@ -14,7 +14,8 @@ class MysticalSpaceTyphoonEffect(Effect):
         #put them in potential_targets
         #(check for blocks and bans)
         cards_except_MST_itself = [card for card in gamestate.yugi.spelltraps_on_field + gamestate.kaiba.spelltraps_on_field 
-                                        if card != self.parent_card]
+                                        if card != self.parent_card and card.location != "Field_Activation_Negated"] #at the time of activating, a negation cannot have happened I think,
+                                        #so that last check may not be necessary
 
         self.args['potential_targets'].clear()
         

@@ -16,6 +16,7 @@ class Card:
         self.cardclass = cardclass
         self.imgpath = imgpath
 
+        
         self.unaffected = Parameter.Parameter(self, 'Unaffected', [])
 
         self.owner = owner
@@ -24,6 +25,10 @@ class Card:
         self.zonearray = None
         self.actiondict = {}
         self.curchoices = set()
+
+        self.CCZModifiers = []
+
+        self.parameters = [self.unaffected]
 
     def refresh_and_give_current_choices(self, gamestate):
         self.curchoices.clear()

@@ -9,6 +9,7 @@ import engine.CardModels.NormalMonsterCardModels as NM
 import engine.CardModels.TrapHole as TH
 import engine.CardModels.MysticalSpaceTyphoon as MST
 import engine.CardModels.MacroCosmos as MC
+import engine.CardModels.ForbiddenLance as FL
 
 import copy
 
@@ -208,8 +209,20 @@ class GameState:
     def startup(self):
         self.has_started = True
         self.sio.emit('begin_duel', {}, room="duel" + str(self.duel_id) + "_public_info")
+        
+        for i in range(3):
+            self.steps_to_do.append(engine.HaltableStep.RunInitialDraw(self.turnplayer))
+
+        for i in range(3):
+            self.steps_to_do.append(engine.HaltableStep.RunInitialDraw(self.otherplayer))
+
         self.turn_start()
         
+    def initial_draw(self, player):
+        DrawAction = engine.Action.DrawCard()
+        DrawAction.init(player)
+        DrawAction.run(self)
+
     def turn_start(self):
         self.steps_to_do.append(engine.HaltableStep.RunDrawPhase())
         self.steps_to_do.append(engine.HaltableStep.RunStandbyPhase())
@@ -492,8 +505,8 @@ def get_default_gamestate(sio, duel_id):
     #yugi_deck = [NM.DarkMagician, NM.MysticalElf, TH.TrapHole]
     #kaiba_deck = [NM.MysticalElf, NM.SummonedSkull, NM.AlexandriteDragon]
 
-    yugi_deck = [NM.DarkMagician, NM.MysticalElf, TH.TrapHole, MC.MacroCosmos]
-    kaiba_deck = [NM.MysticalElf, NM.SummonedSkull, NM.AlexandriteDragon, MST.MysticalSpaceTyphoon]
+    yugi_deck = [NM.DarkMagician, NM.MysticalElf, TH.TrapHole, MC.MacroCosmos, NM.AlexandriteDragon, FL.ForbiddenLance]
+    kaiba_deck = [NM.MysticalElf, NM.SummonedSkull, NM.MysticalElf, TH.TrapHole, NM.AlexandriteDragon, MST.MysticalSpaceTyphoon]
 
     theduel = GameState(yugi_deck, kaiba_deck, sio, duel_id)
 
