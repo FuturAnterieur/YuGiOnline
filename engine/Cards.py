@@ -59,15 +59,19 @@ class MonsterCard(Card):
         self.numtributesrequired = 0
         self.position = "None"
         self.attacks_declared_this_turn = 0
+        self.changed_battle_position_this_turn = False
+        self.was_summoned_this_turn = False
         self.max_attacks_per_turn = 1
         self.can_attack_directly = False
         self.summonmethod = "Normal"
 
         self.actiondict["Normal Summon"] = Action.NormalSummonMonster()
         self.actiondict["Attack"] = Action.DeclareAttack()
+        self.actiondict["Change Position"] = Action.ChangeBattlePosition()
 
         self.actiondict["Normal Summon"].init(self)
         self.actiondict["Attack"].init(self)
+        self.actiondict["Change Position"].init(self)
         
         for effect_class in self.effects_classes:
             self.effects.append(effect_class(gamestate, self))

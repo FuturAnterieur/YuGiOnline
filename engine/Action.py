@@ -560,7 +560,7 @@ class ChainSendsToGraveyard(Action):
 
 class FlipMonsterFaceUp(Action):
     def init(self, card):
-        super().init(card)
+        super().init("Flip monster face up", card)
         self.args = {'monster' : card, 'player1' : card.owner, 'player2' : card.owner.other}
 
     def run(self, gamestate):
@@ -759,6 +759,8 @@ class NormalSummonMonsterCore(Action):
 
     def run(self, gamestate):
          #optional when-effects for the destroy occuring in Tribute miss their timing
+        print("summoning card : " + self.args['summonedmonster'].name)
+
         list_of_steps = [ engine.HaltableStep.ClearLRAIfRecording(self),
                 engine.HaltableStep.NSMCServer(self, 'summonedmonster', 'chosen_zone', 'position'), 
                          engine.HaltableStep.MoveCard(self, 'summonedmonster', 'chosen_zone')]
@@ -782,6 +784,72 @@ class NormalSummonMonsterCore(Action):
         gamestate.run_steps()
 
 
+class ChangeBattlePosition(Action):
+    def init(self, card):
+        super().init("Change battle position", card)
+        self.args = {'card' : card, 'rotation' : ""}
+
+    def reqs(self, gamestate):
+        if len(gamestate.action_stack) > 0:
+            return False
+
+        if self.card.owner != gamestate.turnplayer:
+            return False
+        
+        if self.card.location != "Field":
+            return False
+
+        if gamestate.curphase != "main_phase_1" and gamestate.curphase != "main_phase_2":
+            return False
+
+        if self.card.attacks_declared_this_turn > 0:
+            return False
+
+        if self.card.changed_battle_position_this_turn:
+            return False
+
+        if self.card.was_summoned_this_turn:
+            return False
+
+        return True
+
+    def default_run(self, gamestate):
+        self.card.changed_battle_position_this_turn = True
+        gamestate.monsters_that_changed_pos_this_turn.append(self.card)
+
+        if self.card.position == "DEF":
+            self.card.position = "ATK"
+            self.args['rotation'] = "Vertical"
+        else:
+            self.card.position = "DEF"
+            self.args['rotation'] = "Horizontal"
+        
+        flip_step = engine.HaltableStep.DoNothing(self)
+        if self.card.face_up == FACEDOWN:
+            flip_step = engine.HaltableStep.InitAndRunAction(self, FlipMonsterFaceUp, 'card')
+
+        list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
+                         engine.HaltableStep.ClearLRAIfRecording(self),
+                         engine.HaltableStep.RotateCard(self, 'card', 'rotation'),
+                         flip_step,
+                         engine.HaltableStep.RunImmediateEvents(self),
+                         engine.HaltableStep.ProcessTriggerEvents(self),
+                         engine.HaltableStep.AppendToLRAIfRecording(self),
+                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunEvents('Monster changed position')), 
+                            RunEventsCondition),
+                         engine.HaltableStep.PopActionStack(self),
+                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunMAWsAtEnd()), ActionStackEmpty)]
+
+        self.run_steps(gamestate, list_of_steps)
+
+    run_func = default_run
+
+    
+
+        
+
+
+
 def AttackerCantAttackAnymore(gamestate, args):
     attacker = gamestate.attack_declared_action.card
     return attacker.location != "Field" or attacker.position != "ATK"
@@ -789,7 +857,7 @@ def AttackerCantAttackAnymore(gamestate, args):
 class DeclareAttack(Action):
 
     def init(self, card):
-        super(DeclareAttack, self).init("Declare Attack", card)
+        super().init("Declare Attack", card)
         self.args = {'odaa' : self, 'player' : self.card.owner, 'target_player' : self.card.owner.other, 
                         'attacking_monster' : card, 'target_arg_name' : 'target'}
 
@@ -846,6 +914,12 @@ class DeclareAttack(Action):
 
         if gamestate.current_battle_phase_step != "battle_step":
             return False
+
+        if self.card.owner != gamestate.turnplayer:
+            return False
+
+        if self.card.location != "Field":
+            return False
         
         if gamestate.attack_declared == True:
             return False
@@ -868,6 +942,7 @@ class DeclareAttack(Action):
         return True
 
     def default_run(self, gamestate):
+        gamestate.monsters_that_attacked_this_turn.append(self.card)
         self.card.attacks_declared_this_turn += 1
         gamestate.attack_declared = True
         gamestate.attack_declared_action = self

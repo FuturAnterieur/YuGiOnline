@@ -491,7 +491,7 @@ var CardManager = {
 	var theCard = this.cardsById[cardId];
 	if (theCard.zoneId == zoneId)
 	{
-	     console.log('move complete');
+	     console.log('move already complete');
 	     this.socket.emit('move_complete', {pnum: this.clientNo, duelid: this.duelid});
 	}
 	else
@@ -500,6 +500,8 @@ var CardManager = {
 	     this.cachedClickMode = this.clickMode;
 	     this.clickMode = -1;
 	     var whichHand;
+
+	     console.log("moving card " + cardId + " from zone " + theCard.zoneId +  " to zone " + zoneId);
 	     if (theCard.zoneId == "0_Hand" || theCard.zoneId == "1_Hand") //this part of the code could be called "program migration from hand"
 	     {
 	     	
@@ -519,10 +521,14 @@ var CardManager = {
 		
 		var spliced_position = theCard.indexInHand;	       
 		this.cardsInHands[whichHand].splice(theCard.indexInHand, 1);
-		
 		theCard.indexInHand = undefined;
 		var newNumCardsInHand = this.cardsInHands[whichHand].length;
 
+		for (var i = spliced_position; i < newNumCardsInHand; i++)
+		{
+			this.cardsInHands[whichHand][i].indexInHand = i;
+		}
+		
 		if (zoneId == "0_Hand" || zoneId == "1_Hand") //i.e. if the card is moving from one hand to the other
 		{
 			programMigrationToHand(theCard, zoneId);
@@ -695,33 +701,35 @@ var CardManager = {
 	{
 		this.socket.emit('move_complete', {duelid: this.duelid});
 	}
-	else if (rotation == "Horizontal")
+	else
 	{	
-		ctx = GameArea.context;
-		ctx.save();
+		var increment; var limit;
+		if (rotation == "Vertical")
+		{
+			increment = -5; limit = 0;
+		}
+		else
+		{
+			increment = 5; limit = 90;
+		}
 
 		this.rotation_interval = setInterval(function() {
 			
-
-
-			theCard.undraw();
-			ctx.translate(theCard.x + theCard.width/2, theCard.y + theCard.height/2);
-			ctx.rotate(5*Math.PI / 180);
-			ctx.translate(-1*(theCard.x + theCard.width/2), -1*(theCard.y + theCard.height/2));
-			theCard.draw();
+			theCard.angle += increment;
 			
-			degrees_counter += 5;
-			if (degrees_counter >= 90)
+			GameArea.clear();
+			CardManager.drawCards();
+			CardManager.drawPhaseButtons();
+			
+			if (theCard.angle == limit)
 			{
 				clearInterval(CardManager.rotation_interval);
-				theCard.rotation = "Horizontal";
-				ctx.restore();
+				theCard.rotation = rotation;
 				CardManager.socket.emit('move_complete', {duelid: CardManager.duelid});
 			}
 
 		}, 100);
 	}
-
     },
 
     drawPhaseButtons : function()

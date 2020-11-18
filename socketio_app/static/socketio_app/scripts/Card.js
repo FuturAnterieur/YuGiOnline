@@ -29,6 +29,7 @@ function Card(zoneId, face_up, rotation, src, manager, ownerNo, id, indexInArray
     }
     this.x = coords.x;
     this.y = coords.y;
+    this.angle = 0;
     
     this.manager = manager;
     this.ownerNo = ownerNo;
@@ -73,19 +74,18 @@ function Card(zoneId, face_up, rotation, src, manager, ownerNo, id, indexInArray
     this.draw = function()
     {
 	ctx = GameArea.context;
-	if (this.rotation == "Horizontal")
+	if (this.angle != 0)
 	{
 		ctx.save();
 		ctx.translate(this.x + this.width/2, this.y + this.height/2);
-		ctx.rotate(90*Math.PI / 180);
+		ctx.rotate(this.angle*Math.PI / 180);
 		ctx.translate(-1*(this.x + this.width/2), -1*(this.y + this.height/2));
 	}
-
 	ctx.drawImage(this.image_to_draw, this.x, this.y, this.width, this.height);
 
-	if (this.rotation == "Horizontal")
+	if (this.angle != 0)
 	{
-	    ctx.restore();
+		ctx.restore();
 	}
     }
     this.undraw = function()

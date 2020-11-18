@@ -489,6 +489,8 @@ class NSMCServer(HaltableStep): #NormalSummonMonsterCoreServer
     def run(self, gamestate):
         summonedmonster = self.args[self.sman]
         
+        summonedmonster.was_summoned_this_turn = True
+        gamestate.monsters_that_were_summoned_this_turn.append(summonedmonster)
         player = summonedmonster.owner
         player.hand.remove_card(summonedmonster)
         player.monsterzones.add_card(summonedmonster, self.args[self.zan].zonenum)
@@ -515,6 +517,7 @@ class SetSpellTrapServer(HaltableStep):
         chosenzonenum = zone.zonenum
         player.spelltrapzones.add_card(card, chosenzonenum)
         card.wassetthisturn = True
+        gamestate.spelltraps_that_were_set_this_turn.append(card)
 
 class ActivateSpellTrapBeforeActivate(HaltableStep):
     def __init__(self, pA, card_arg_name, effect_arg_name, zone_arg_name = None):
@@ -710,6 +713,8 @@ class MoveCard(HaltableStep):
     def run(self, gamestate):
         self.card = self.args[self.can]
         self.tozone = self.args[self.zan]
+
+        print("moving card " + self.card.name + " to zone " + self.tozone.name)
         
         gamestate.sio.emit('move_card', {'cardid': str(self.card.ID), 'zone': self.tozone.name}, room="duel" + str(gamestate.duel_id) + "_public_info")
 
@@ -851,7 +856,7 @@ class OpenWindowForResponse(HaltableStep):
         
 class SetMultipleActionWindow(HaltableStep):
     def __init__(self, controlling_player, current_phase_or_step):
-        super(SetMultipleActionWindow, self).__init__(None)
+        super().__init__(None)
         self.controlling_player = controlling_player
         self.current_phase_or_step = current_phase_or_step
     

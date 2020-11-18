@@ -77,8 +77,11 @@ class GameState:
 
         self.player_in_multiple_action_window = None
 
+        self.spelltraps_that_were_set_this_turn = []
         
-        self.monstersthatattackedthisturn = []
+        self.monsters_that_attacked_this_turn = []
+        self.monsters_that_changed_pos_this_turn = []
+        self.monsters_that_were_summoned_this_turn = []
         self.monsters_to_be_destroyed_by_battle = []
 
         self.winners = []
@@ -385,15 +388,29 @@ class GameState:
         self.battlephasebegan = False
         self.battlephaseended = False
         self.normalsummonscounter = 0
-        for monstercard in self.monstersthatattackedthisturn:
-            monstercard.attackedthisturn = False
-        self.monstersthatattackedthisturn.clear()
+        
+        for monstercard in self.monsters_that_attacked_this_turn:
+            monstercard.attacks_declared_this_turn = 0
+        self.monsters_that_attacked_this_turn.clear()
+
+        for monstercard in self.monsters_that_changed_pos_this_turn:
+            monstercard.changed_battle_position_this_turn = False
+        self.monsters_that_changed_pos_this_turn.clear()
+
+        for monstercard in self.monsters_that_were_summoned_this_turn:
+            monstercard.was_summoned_this_turn = False
+        self.monsters_that_changed_pos_this_turn.clear()
 
         for zonenum in self.turnplayer.spelltrapzones.occupiedzonenums:
             card = self.turnplayer.spelltrapzones.get_card(zonenum)
             print("End of turn review", card.name, card.cardclass, card.face_up, card.wassetthisturn)
-            if card.wassetthisturn == True:
-                card.wassetthisturn = False
+            
+        
+        for spelltrap in self.spelltraps_that_were_set_this_turn:
+            spelltrap.wassetthisturn = False
+
+        self.spelltraps_that_were_set_this_turn.clear()
+                
 
     def change_players(self):
         self.turnplayer = self.otherplayer
