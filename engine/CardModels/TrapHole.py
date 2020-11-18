@@ -48,7 +48,8 @@ class TrapHoleEffect(Effect):
 
     def MatchOnTHCompatibleSummon(self, action, gamestate):
         result = False
-        if action.name == "Normal Summon Monster" and action.card.face_up == FACEUPTOEVERYONE and action.card.attack >= 1000:
+        action_name_cond = action.name == "Normal Summon Monster" or action.name == "Flip Summon Monster"
+        if action_name_cond and action.card.face_up == FACEUPTOEVERYONE and action.card.attack >= 1000:
             self.args['potential_target'] = action.card
             result = True
 

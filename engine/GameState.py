@@ -179,7 +179,7 @@ class GameState:
         self.saved_trigger_events = {'MSS1TP' : [], 'MSS1OP' : [], 'OSS1TP' : [], 'OSS1OP' : [], 'OFastTP' : [], 'OFastOP' : []}
         
         self.events_in_timing = {'respond_MSS1TP' : [], 'respond_MSS1OP' : [], 'respond_OSS1TP' : [], 'respond_OSS1OP' : [],
-                                    'respond_OFast_LRA' : [], 'respond_OFast_CL' : [],
+                                    'respond_OFast_LRA' : [], 'respond_OFast_CL' : [], 'respond_Oexclusive' : [],
                                 'trigger_MSS1TP' : [],  'trigger_MSS1OP' : [], 'trigger_OSS1TP' : [], 'trigger_OSS1OP' : [],
                                 'trigger_OFast' : []}
 
@@ -322,8 +322,13 @@ class GameState:
 
     def run_action_asked_for(self, cardId, action_name):
         if (self.player_to_stop_waiting_when_run_action is not None):
+            stepname = self.step_waiting_for_answer.__class__.__name__
+            print("Step waiting for answer on action choice : " + stepname)
 
-            engine.HaltableStep.clear_in_timing_respond_OFast_CL(self)
+            if stepname == "OpenWindowForResponse":
+                engine.HaltableStep.clear_in_timing_respond_OFast_CL(self)
+            elif stepname == "OpenWindowForExclusiveResponse":
+                engine.HaltableStep.clear_in_timing_respond_Oexlcusive(self)
 
             waiting_player = self.player_to_stop_waiting_when_run_action
             self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
@@ -331,9 +336,6 @@ class GameState:
 
             self.keep_running_steps = True
 
-        #self.lastresolvedactions.clear() #i don't think this is appropriate here
-        #if it would stay here, activating a new chain link could remove the LRA at the base of the chain
-        
         card = self.cardsById[cardId]
         action = card.actiondict[action_name]
         action.run(self)
@@ -343,7 +345,9 @@ class GameState:
         aan = self.answer_arg_name
         step.args[aan] = answer
 
-        if self.step_waiting_for_answer.__class__.__name__ == "OpenWindowForResponse":
+        stepname = self.step_waiting_for_answer.__class__.__name__
+
+        if stepname == "OpenWindowForResponse" or stepname == "OpenWindowForExclusiveResponse":
             #no need for the question code if we use that
             
             
@@ -351,7 +355,10 @@ class GameState:
             waiting_player = responding_player.other
             
             if (answer == "No"):
-                engine.HaltableStep.clear_in_timing_respond_OFast_CL(self)
+                if stepname == "OpenWindowForResponse":
+                    engine.HaltableStep.clear_in_timing_respond_OFast_CL(self)
+                else:
+                    engine.HaltableStep.clear_in_timing_respond_Oexclusive(self)
                 
                 
                 self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
@@ -362,9 +369,9 @@ class GameState:
             elif (answer == "Yes"):
                 self.waiting_for_one_action_choice = True
                 self.player_to_stop_waiting_when_run_action = waiting_player
-
+                
             
-        elif self.step_waiting_for_answer.__class__.__name__ == "AskQuestion":
+        elif stepname == "AskQuestion":
             self.keep_running_steps = True
             self.run_steps()
     
@@ -416,34 +423,41 @@ class GameState:
         self.turnplayer = self.otherplayer
         self.otherplayer = self.turnplayer.other
 
-    def refresh_available_choices(self, player):
-        card_choices = []
-        for handcard in player.hand.cards:
-            if len(handcard.refresh_and_give_current_choices(self)) > 0:
-                card_choices.append(handcard)
+    def refresh_available_choices(self, player, cards_to_check = None):
+        card_choices = [] 
+
+        if cards_to_check is not None:
+            for card in cards_to_check:
+                if len(card.refresh_and_give_current_choices(self)) > 0:
+                    card_choices.append(card)
+
+        else:
+            for handcard in player.hand.cards:
+                if len(handcard.refresh_and_give_current_choices(self)) > 0:
+                    card_choices.append(handcard)
+            
+            counter = 0
+            for monsterzone in player.monsterzones.listofzones:
+                index = "monster" + str(counter)
+                if counter in player.monsterzones.occupiedzonenums:
+                    monstercard = monsterzone.cards[0]
+                    if len(monstercard.refresh_and_give_current_choices(self)) > 0:
+                        card_choices.append(monstercard)
+                counter += 1
+
+            counter = 0
+            for magiczone in player.spelltrapzones.listofzones:
+                if counter in player.spelltrapzones.occupiedzonenums:
+                    magiccard = magiczone.cards[0]
+                    #some continuous spell/trap cards have activatable effects
+                    if len(magiccard.refresh_and_give_current_choices(self)) > 0:
+                        card_choices.append(magiccard)
+                counter += 1
+
+            for gycard in player.graveyard.cards:
+                if len(gycard.refresh_and_give_current_choices(self)) > 0:
+                    card_choices.append(gycard)
         
-        counter = 0
-        for monsterzone in player.monsterzones.listofzones:
-            index = "monster" + str(counter)
-            if counter in player.monsterzones.occupiedzonenums:
-                monstercard = monsterzone.cards[0]
-                if len(monstercard.refresh_and_give_current_choices(self)) > 0:
-                    card_choices.append(monstercard)
-            counter += 1
-
-        counter = 0
-        for magiczone in player.spelltrapzones.listofzones:
-            if counter in player.spelltrapzones.occupiedzonenums:
-                magiccard = magiczone.cards[0]
-                #some continuous spell/trap cards have activatable effects
-                if len(magiccard.refresh_and_give_current_choices(self)) > 0:
-                    card_choices.append(magiccard)
-            counter += 1
-
-        for gycard in player.graveyard.cards:
-            if len(gycard.refresh_and_give_current_choices(self)) > 0:
-                card_choices.append(gycard)
-    
         self.cur_card_choices = card_choices
         
     def add_ban(self, ban):

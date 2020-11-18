@@ -499,6 +499,15 @@ class NSMCServer(HaltableStep): #NormalSummonMonsterCoreServer
             summonedmonster.face_up = FACEUPTOEVERYONE
         else:
             summonedmonster.face_up = FACEDOWN
+
+class FlipSummonServer(HaltableStep):
+    def __init__(self, pA, card_arg_name):
+        super().__init__(pA)
+        self.can = card_arg_name
+
+    def run(self, gamestate):
+        card = self.args[self.can]
+        card.location = "Field"
         
 class SetSpellTrapServer(HaltableStep):
     def __init__(self, pA, card_arg_name, chosen_zone_arg_name):
@@ -822,7 +831,7 @@ class AskQuestion(HaltableStep):
 class OpenWindowForResponse(HaltableStep):  
     #this could be turned into an AskQuestion class with arguments, but would require an extra step for getting the possible_cards
     def __init__(self, pA, response_type, responding_player_arg_name, answer_arg_name):
-        super(OpenWindowForResponse, self).__init__(pA)
+        super().__init__(pA)
         self.rpan = responding_player_arg_name
         self.aan = answer_arg_name
         self.response_type = response_type
@@ -853,6 +862,50 @@ class OpenWindowForResponse(HaltableStep):
         gamestate.step_waiting_for_answer = self
         gamestate.answer_arg_name = self.aan
         gamestate.keep_running_steps = False
+
+def clear_in_timing_respond_Oexclusive(gamestate):
+    for event in gamestate.events_in_timing["respond_Oexclusive"]:
+        event.in_timing = False
+    gamestate.events_in_timing["respond_Oexclusive"].clear()
+
+
+class OpenWindowForExclusiveResponse(HaltableStep):
+    def __init__(self, pA, response_type, action_to_match_arg_name, responding_player_arg_name, answer_arg_name):
+        super().__init__(pA)
+        self.rpan = responding_player_arg_name
+        self.aan = answer_arg_name
+        self.response_type = response_type
+        self.atman = action_to_match_arg_name
+
+    def run(self, gamestate):
+        responding_player = self.args[self.rpan]
+        waiting_player = responding_player.other
+        action_to_match = self.args[self.atman]
+
+        cards_to_check = []
+        for event in gamestate.respond_events:
+            #the spell speed and targeting eligibility conditions will be checked in the 
+            #event's effect's reqs
+            if event.category == "OSS1" or event.category == "OFast":
+                if event.matches(action_to_match, gamestate):
+                    gamestate.events_in_timing["respond_Oexclusive"].append(event)
+                    cards_to_check.append(event.parent_card)
+                    event.in_timing = True
+            
+        gamestate.refresh_available_choices(responding_player, cards_to_check)
+        
+        answer_choices = ['Yes', 'No'] if len(gamestate.cur_card_choices) > 0 else ['No']
+        
+        gamestate.sio.emit('start_waiting', {'reason' : self.response_type},
+                                room =  "duel" + str(gamestate.duel_id) + "_player" + str(waiting_player.player_id) + "_info")
+        gamestate.sio.emit('ask_question', {'question' : self.response_type, 'choices' : answer_choices}, 
+                                room =  "duel" + str(gamestate.duel_id) + "_player" + str(responding_player.player_id) + "_info")
+        
+        gamestate.step_waiting_for_answer = self
+        gamestate.answer_arg_name = self.aan
+        gamestate.keep_running_steps = False
+
+        
         
 class SetMultipleActionWindow(HaltableStep):
     def __init__(self, controlling_player, current_phase_or_step):

@@ -62,6 +62,25 @@ class RunOptionalResponseWindows(Action):
 
         self.run_steps(gamestate, list_of_steps)
 
+class RunExclusiveResponseWindows(Action):
+    def init(self, firstplayer, event_type, action_to_match):
+        self.args = {}
+        self.args['firstplayer'] = firstplayer
+        self.args['secondplayer'] = firstplayer.other
+        self.event_type = event_type
+        self.args['action_to_match'] = action_to_match
+
+    def run(self, gamestate):
+        step2 = engine.HaltableStep.OpenWindowForExclusiveResponse(self, 'response_window:' + self.event_type, 'action_to_match', 'firstplayer', 'FirstplayerUsesRW')
+        step3 = engine.HaltableStep.RunStepIfCondition(self, 
+                engine.HaltableStep.OpenWindowForExclusiveResponse(self, 'response_window:' + self.event_type, 
+                                                                    'action_to_match', 'secondplayer', 'SecondplayerUsesRW'), 
+                    RunOtherPlayerWindowCondition, 'FirstplayerUsesRW')
+
+        list_of_steps = [step2, step3]
+
+        self.run_steps(gamestate, list_of_steps)
+
 
 class RunResponseWindows(Action):
     #Running ProcessMandatoryResponseEvents (which adds to TriggersToRun if there are) and then going to LaunchTTR or RunOptionalResponseWindows 
@@ -558,29 +577,6 @@ class ChainSendsToGraveyard(Action):
 
         gamestate.run_steps()
 
-class FlipMonsterFaceUp(Action):
-    def init(self, card):
-        super().init("Flip monster face up", card)
-        self.args = {'monster' : card, 'player1' : card.owner, 'player2' : card.owner.other}
-
-    def run(self, gamestate):
-        
-        self.args['monster'].face_up = FACEUPTOEVERYONE
-        
-        #no ClearLRA because this will always be a sub-action
-        list_of_steps = [engine.HaltableStep.ChangeCardVisibility(self, ['player1', 'player2'], 'monster', "1"),
-                        engine.HaltableStep.ProcessFlipEvents(self)]
-
-        #flip effects in a summon situation :
-        #they will be added to the saved if-triggers 
-        #and will thus be triggered during the SEGOC chain building at the end of the summon.
-
-        #in a battle situation,
-        #the RunImmediateEvents will add an if-trigger that triggers at AfterDamageCalculation
-
-        #so a flip trigger's category is 'if' (either mandatory or optional), but it goes in the gamestate.flip_triggers container.
-        
-        self.run_steps(gamestate, list_of_steps)
 
 class Target(Action):
     def init(self, card, list_of_possible_targets, parent_effect = None, target_arg_name_for_effect = None):
@@ -606,7 +602,7 @@ class Target(Action):
 class SummonMonster(Action):
 
     def init(self, name, card):
-        super(SummonMonster, self).init(name, card)
+        super().init(name, card)
         
 
 class TributeMonsters(Action):
@@ -667,7 +663,7 @@ def CheckIfNotNegated(gamestate, args, action_arg_name):
 class NormalSummonMonster(SummonMonster):
     
     def init(self, card):
-        super().init("Normal Summon Monster", card)
+        super().init("Monster would be Normal Summoned", card)
         self.TributeAction = TributeMonsters()
         self.TributeAction.init(self.card)
         self.args = { 'this_action' : self, 'summonedmonster' : card, 'actionplayer' : card.owner, 
@@ -712,7 +708,8 @@ class NormalSummonMonster(SummonMonster):
         gamestate.normalsummonscounter += 1 #optional : put that in a dedicated step (that must go before the summon negation window)
         player = self.card.owner
         self.args['zone_choices'] = [zone for zone in player.monsterzones.listofzones if zone.zonenum not in player.monsterzones.occupiedzonenums]
-
+        self.card.location = "Field - In Summon Process"
+        
         #TODO : steps (and javascript) for the selection of a free zone
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                         engine.HaltableStep.ClearLRAIfRecording(self),
@@ -720,8 +717,7 @@ class NormalSummonMonster(SummonMonster):
                                                                                     RunTributeCondition, 'summonedmonster'),
                         engine.HaltableStep.ChooseFreeZone(self, 'actionplayer', 'zone_choices', 'chosen_zone'),
                         engine.HaltableStep.AskQuestion(self, 'actionplayer', 'choose_position', ['ATK', 'DEF'], 'ATK_or_DEF_answer'),  
-                        engine.HaltableStep.InitAndRunAction(self, MonsterWouldBeSummonedEvents, 'summonedmonster'),
-                        engine.HaltableStep.InitAndRunAction(self, RunOptionalResponseWindows, 'actionplayer', 'event1'), 
+                        engine.HaltableStep.InitAndRunAction(self, RunExclusiveResponseWindows, 'actionplayer', 'event1', 'this_action'), 
                         engine.HaltableStep.RunStepIfCondition(self, 
                             engine.HaltableStep.InitAndRunAction(self, NormalSummonMonsterCore, 'summonedmonster', 'ATK_or_DEF_answer', 'chosen_zone', 'this_action'), 
                             CheckIfNotNegated, 'this_action'),
@@ -741,14 +737,6 @@ class NormalSummonMonster(SummonMonster):
 
     run_func = default_run
 
-class MonsterWouldBeSummonedEvents(Action):
-    def init(self, card):
-        super().init("Monster would be summoned", card)
-        self.args = {}
-
-    def run(self, gamestate):
-        los = steps_for_event_action(self, gamestate)
-        self.run_steps(gamestate, los)
 
 class NormalSummonMonsterCore(Action):
     def init(self, card, position, zone, parentNormalSummonAction):
@@ -758,9 +746,10 @@ class NormalSummonMonsterCore(Action):
         self.parentNormalSummonAction = parentNormalSummonAction
 
     def run(self, gamestate):
-         #optional when-effects for the destroy occuring in Tribute miss their timing
-        print("summoning card : " + self.args['summonedmonster'].name)
 
+        self.parentNormalSummonAction.name = "Normal Summon Monster"
+        
+        #optional when-effects for the destroy occuring in Tribute miss their timing
         list_of_steps = [ engine.HaltableStep.ClearLRAIfRecording(self),
                 engine.HaltableStep.NSMCServer(self, 'summonedmonster', 'chosen_zone', 'position'), 
                          engine.HaltableStep.MoveCard(self, 'summonedmonster', 'chosen_zone')]
@@ -774,9 +763,9 @@ class NormalSummonMonsterCore(Action):
                                     engine.HaltableStep.RotateCard(self, 'summonedmonster', 'rotation')])
 
             
-        list_of_steps.extend([engine.HaltableStep.ProcessTriggerEvents(self.parentNormalSummonAction),
-                              engine.HaltableStep.AppendToLRAIfRecording(self.parentNormalSummonAction),
-                              engine.HaltableStep.RunImmediateEvents(self.parentNormalSummonAction)])
+        list_of_steps.extend([engine.HaltableStep.ProcessTriggerEvents(self),
+                              engine.HaltableStep.AppendToLRAIfRecording(self),
+                              engine.HaltableStep.RunImmediateEvents(self)])
 
         for i in range(len(list_of_steps) - 1, -1, -1):
             gamestate.steps_to_do.appendleft(list_of_steps[i])
@@ -787,7 +776,7 @@ class NormalSummonMonsterCore(Action):
 class ChangeBattlePosition(Action):
     def init(self, card):
         super().init("Change battle position", card)
-        self.args = {'card' : card, 'rotation' : ""}
+        self.args = {'card' : card, 'rotation' : "", 'this_action' : self}
 
     def reqs(self, gamestate):
         if len(gamestate.action_stack) > 0:
@@ -811,6 +800,9 @@ class ChangeBattlePosition(Action):
         if self.card.was_summoned_this_turn:
             return False
 
+        if self.card.face_up == FACEDOWN:
+            return False
+
         return True
 
     def default_run(self, gamestate):
@@ -824,14 +816,9 @@ class ChangeBattlePosition(Action):
             self.card.position = "DEF"
             self.args['rotation'] = "Horizontal"
         
-        flip_step = engine.HaltableStep.DoNothing(self)
-        if self.card.face_up == FACEDOWN:
-            flip_step = engine.HaltableStep.InitAndRunAction(self, FlipMonsterFaceUp, 'card')
-
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
                          engine.HaltableStep.ClearLRAIfRecording(self),
                          engine.HaltableStep.RotateCard(self, 'card', 'rotation'),
-                         flip_step,
                          engine.HaltableStep.RunImmediateEvents(self),
                          engine.HaltableStep.ProcessTriggerEvents(self),
                          engine.HaltableStep.AppendToLRAIfRecording(self),
@@ -845,10 +832,122 @@ class ChangeBattlePosition(Action):
     run_func = default_run
 
     
+class FlipMonsterFaceUp(Action):
+    def init(self, card):
+        super().init("Flip monster face up", card)
+        self.args = {'monster' : card, 'player1' : card.owner, 'player2' : card.owner.other}
 
+    def run(self, gamestate):
+        
+        
+        
+        #no ClearLRA because this will always be a sub-action
+        list_of_steps = [engine.HaltableStep.ChangeCardVisibility(self, ['player1', 'player2'], 'monster', "1"),
+                        engine.HaltableStep.InitAndRunAction(self, ProcessFlipEvents, 'monster')]
+
+        #flip effects in a summon situation :
+        #they will be added to the saved if-triggers 
+        #and will thus be triggered during the SEGOC chain building at the end of the summon.
+
+        #in a battle situation,
+        #the RunImmediateEvents will add an if-trigger that triggers at AfterDamageCalculation
+
+        #so a flip trigger's category is 'if' (either mandatory or optional), but it goes in the gamestate.flip_triggers container.
+        
+        self.run_steps(gamestate, list_of_steps)
+
+
+class ProcessFlipEvents(Action):
+    def init(self, card):
+        super().init("Monster flipped face up", card)
+        self.args = {'monster' : card}
+
+    def run(self, gamestate):
+        
+        self.args['monster'].face_up = FACEUPTOEVERYONE
+        list_of_steps = [engine.HaltableStep.ProcessFlipEvents(self)]
+        self.run_steps(gamestate, list_of_steps)
+
+class FlipSummonMonster(Action):
+    def init(self, card):
+        super().init("Monster would be flip summoned", card)
+        self.args = {'card' : card, 'player1' : card.owner, 'player2': card.owner.other, 'rotation' : "Vertical", 'this_action' : self, 'event1' : "Monster would be flip summoned"}
         
 
+    def reqs(self, gamestate):
+        if len(gamestate.action_stack) > 0:
+            return False
 
+        if self.card.owner != gamestate.turnplayer:
+            return False
+        
+        if self.card.location != "Field":
+            return False
+
+        if gamestate.curphase != "main_phase_1" and gamestate.curphase != "main_phase_2":
+            return False
+
+        if self.card.attacks_declared_this_turn > 0:
+            return False
+
+        if self.card.changed_battle_position_this_turn:
+            return False
+
+        if self.card.was_summoned_this_turn:
+            return False
+
+        if self.card.face_up != FACEDOWN:
+            return False
+
+        return True
+
+    def run(self, gamestate):
+        self.card.position = "ATK"
+        self.card.face_up = FACEUPTOEVERYONE
+
+        self.card.changed_battle_position_this_turn = True
+        gamestate.monsters_that_changed_pos_this_turn.append(self.card)
+
+        self.card.location = "Field - In Summon Process"
+        self.name = "Monster would be Flip Summoned"
+
+        change_vis_step = engine.HaltableStep.ChangeCardVisibility(self, ['player1', 'player2'], 'card', "1")
+        summon_neg_window = engine.HaltableStep.InitAndRunAction(self, RunExclusiveResponseWindows, 'player1', 'event1', 'this_action')
+        flip_step = engine.HaltableStep.RunStepIfCondition(self, 
+                                        engine.HaltableStep.InitAndRunAction(self, FlipSummonCore, 'this_action'),
+                                        CheckIfNotNegated, 'this_action')
+        
+        
+        list_of_steps = [engine.HaltableStep.AppendToActionStack(self),
+                         engine.HaltableStep.ClearLRAIfRecording(self),
+                         engine.HaltableStep.RotateCard(self, 'card', 'rotation'),
+                         change_vis_step,
+                         summon_neg_window,
+                         flip_step, 
+                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunEvents('Flip Summon')), 
+                            RunEventsCondition),
+                         engine.HaltableStep.PopActionStack(self),
+                         engine.HaltableStep.RunStepIfCondition(self, engine.HaltableStep.RunAction(self, RunMAWsAtEnd()), ActionStackEmpty)]
+
+        self.run_steps(gamestate, list_of_steps)
+
+
+class FlipSummonCore(Action):
+    def init(self, parent_flip_summon_action):
+        super().init("Flip Summon Monster", parent_flip_summon_action.card)
+        self.args = parent_flip_summon_action.args
+
+    def run(self, gamestate):
+        self.args['card'].location = "Field"
+
+        list_of_steps = [engine.HaltableStep.FlipSummonServer(self, 'card'),
+                        engine.HaltableStep.InitAndRunAction(self, ProcessFlipEvents, 'card'),
+                        engine.HaltableStep.RunImmediateEvents(self),
+                         engine.HaltableStep.ProcessTriggerEvents(self),
+                         engine.HaltableStep.AppendToLRAIfRecording(self)]
+
+        self.run_steps(gamestate, list_of_steps)
+                        
 
 def AttackerCantAttackAnymore(gamestate, args):
     attacker = gamestate.attack_declared_action.card

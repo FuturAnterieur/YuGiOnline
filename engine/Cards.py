@@ -68,10 +68,12 @@ class MonsterCard(Card):
         self.actiondict["Normal Summon"] = Action.NormalSummonMonster()
         self.actiondict["Attack"] = Action.DeclareAttack()
         self.actiondict["Change Position"] = Action.ChangeBattlePosition()
+        self.actiondict["Flip Summon"] = Action.FlipSummonMonster()
 
         self.actiondict["Normal Summon"].init(self)
         self.actiondict["Attack"].init(self)
         self.actiondict["Change Position"].init(self)
+        self.actiondict["Flip Summon"].init(self)
         
         for effect_class in self.effects_classes:
             self.effects.append(effect_class(gamestate, self))
