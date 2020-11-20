@@ -21,7 +21,7 @@ class CancellationGraph:
         self.nodes.append(self.start_node)
 
 
-def find_adjacent_nodes(graph, node, previous_card, gamestate):
+def find_adjacent_nodes(graph, node, card_to_check_unaff_on, gamestate):
     modifier = node.related_modifier
     affected_card = node.affected_card
     if modifier.is_continuous:
@@ -38,33 +38,26 @@ def find_adjacent_nodes(graph, node, previous_card, gamestate):
                 find_adjacent_nodes(graph, newnode, modifier.parent_effect.parent_card, gamestate)
 
          
-       
-        for unaffmod in previous_card.unaffected.get_modifiers(gamestate):
+        for unaffmod in card_to_check_unaff_on.unaffected.get_modifiers(gamestate):
             if unaffmod != modifier:
                 unaffmod_unaffs_modifier = unaffmod.unaff_func(modifier.parent_effect, gamestate)
                 condition = False
-                if affected_card == previous_card and modifier.mod_type == UNAFFECTED:
+                if modifier.mod_type == UNAFFECTED:
                     modifier_unaffs_unaffmod = modifier.unaff_func(unaff_mod.parent_effect, gamestate)
                     if modifier_unaffs_unaffmod and unaffmod_unaffs_modifier: #conflict
                         condition = unaffmod.get_priority() >= modifier.get_priority()
-                    elif not modifier_unaffs_unaffmod: #two unaffs on same card, but no conflict between them
+                    else: #two unaffs on same card, but no conflict between them
                         condition = unaffmod_unaffs_modifier
-                    else:
-                        condition = False
-
-                elif affected_card == previous_card and modifier.mod_type != UNAFFECTED:
+                    
+                elif modifier.mod_type != UNAFFECTED:
                     condition = unaffmod_unaffs_modifier
 
-                else: 
-                    condition = False
-                    #this is to prevent unaffected modifiers from causing a card to become
-                    #negated by unaffected modifiers applying to other cards
 
                 if condition:
-                    newnode = CancellationNode(unaffmod, previous_card)
+                    newnode = CancellationNode(unaffmod, modifier.parent_effect.parent_card)
                     graph.nodes.append(newnode)
                     node.adjacents.append(newnode)
-                    find_adjacent_nodes(graph, newnode, modifier.parent_effect.parent_card, gamestate)
+                    find_adjacent_nodes(graph, newnode, card_to_check_unaff_on, gamestate)
                     
 
 def build_cancellation_graph(start_modifier, start_card, gamestate):
