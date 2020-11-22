@@ -585,7 +585,7 @@ class PerformDamageCalculation(HaltableStep):
 
         else:
             
-
+            
             targetstat = 0
             
             if target.position == "DEF":
@@ -599,9 +599,9 @@ class PerformDamageCalculation(HaltableStep):
             winnermonster = attackingmonster if difference > 0 else target
             losermonster = attackingmonster if difference < 0 else target
 
-            if difference == 0 and target.positon == "ATK":
+            if difference == 0 and target.position == "ATK":
                 gamestate.monsters_to_be_destroyed_by_battle.extend([winnermonster, losermonster])
-
+                
             else:
                 if winnermonster.position == "ATK":
                     gamestate.monsters_to_be_destroyed_by_battle.append(losermonster)
@@ -757,8 +757,8 @@ class ChangeLifePointsAnimation(HaltableStep):
 
     def run(self, gamestate):
         player = self.args[self.pan]
-        amount = self.args[self.aan]
         if player is not None:
+            amount = self.args[self.aan]
             gamestate.sio.emit('change_LP', {'player' : str(player.player_id), 'amount': str(amount)}, 
                                         room="duel" + str(gamestate.duel_id) + "_public_info")
 

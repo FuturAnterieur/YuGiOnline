@@ -1,7 +1,9 @@
 import engine.Effect as Effect
 import engine.Action as Action
 import engine.ActionsSpellTrap as ActionsSpellTrap
+import engine.ActionsMonster as ActionsMonster
 import engine.Parameter as Parameter
+
 
 from engine.defs import FACEDOWN
 
@@ -65,10 +67,10 @@ class MonsterCard(Card):
         self.can_attack_directly = False
         self.summonmethod = "Normal"
 
-        self.actiondict["Normal Summon"] = Action.NormalSummonMonster()
-        self.actiondict["Attack"] = Action.DeclareAttack()
-        self.actiondict["Change Position"] = Action.ChangeBattlePosition()
-        self.actiondict["Flip Summon"] = Action.FlipSummonMonster()
+        self.actiondict["Normal Summon"] = ActionsMonster.NormalSummonMonster()
+        self.actiondict["Attack"] = ActionsMonster.DeclareAttack()
+        self.actiondict["Change Position"] = ActionsMonster.ChangeBattlePosition()
+        self.actiondict["Flip Summon"] = ActionsMonster.FlipSummonMonster()
 
         self.actiondict["Normal Summon"].init(self)
         self.actiondict["Attack"].init(self)
@@ -78,7 +80,7 @@ class MonsterCard(Card):
         for effect_class in self.effects_classes:
             self.effects.append(effect_class(gamestate, self))
             if self.effects[-1].type == "Ignition":
-                self.actiondict["Activate Effect"] = Action.ActivateMonsterEffect()
+                self.actiondict["Activate Effect"] = ActionsMonster.ActivateMonsterEffect()
                 self.actiondict["Activate Effect"].init(gamestate, self, self.effects[-1])
 
 
