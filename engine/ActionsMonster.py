@@ -34,8 +34,6 @@ class TributeMonsters(Action):
                  
         list_of_steps = [engine.HaltableStep.AppendToActionStack(self), engine.HaltableStep.ClearLRAIfRecording(self)]
         
-        #'Monster' is not an arg from the args dict but a parameter indicating to choose among monster zones
-        
         list_of_steps_for_one_tribute = [engine.HaltableStep.ChooseOccupiedZone(self,'deciding_player', 'possible_tributes', 'chosen_monster'),
                                          engine.HaltableStep.InitAndRunAction(self, ChangeCardZone, 'ccz_name', 
                                                     'chosen_monster', 'destroy_cause', 'parent_effect', 'destroy_is_contained')]

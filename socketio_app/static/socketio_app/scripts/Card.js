@@ -19,8 +19,9 @@ function Card(zoneId, face_up, rotation, src, manager, ownerNo, id, indexInArray
 		whichHand = "his";
 	}
 	curNumCardsInHand = manager.cardsInHands[whichHand].length;
-	Coords = manager.getCardInHandPos(whichHand, totalNumCardsInHand, curNumCardsInHand);
+	coords = manager.getCardInHandPos(whichHand, totalNumCardsInHand, curNumCardsInHand);
 	manager.cardsInHands[whichHand].push(this);
+	this.indexInHand = curNumCardsInHand;
     }
     else
     {

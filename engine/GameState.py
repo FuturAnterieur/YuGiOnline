@@ -502,8 +502,8 @@ class GameState:
         
 
     def refresh_view(self, spectator_id):
-        self.sio.emit('set_numcards_in_hands', {'0_Hand_numcards': len(self.firstplayer.hand.cards), 
-                                            '1_Hand_numcards' : len(self.secondplayer.hand.cards)}, 
+        self.sio.emit('set_numcards_in_hands', {'0_Hand_numcards': len(self.yugi.hand.cards), 
+                                            '1_Hand_numcards' : len(self.kaiba.hand.cards)}, 
                                 room="duel" + str(self.duel_id) + "_spectator" + str(spectator_id) + "_info")
 
         for card in self.cards_in_play:
