@@ -556,12 +556,10 @@ var CardManager = {
 		if (splitzone[0] == this.perspectiveNo)
 		{
 			whichHand = 'my';
-			this.numcards_in_my_hand -= 1;
 		}
 		else
 		{
 			whichHand = 'his';
-			this.numcards_in_his_hand -= 1;
 		}
 		
 		var spliced_position = theCard.indexInHand;	       
@@ -624,12 +622,10 @@ var CardManager = {
 	if (splitzone[0] == this.perspectiveNo)
 	{
 		whichHand = 'my';
-		this.numcards_in_my_hand += 1;
 	}
 	else
 	{
 		whichHand = 'his';
-		this.numcards_in_his_hand += 1;
 	}	
 	
 	this.cardsInHands[whichHand].push(theCard);
@@ -805,13 +801,6 @@ var CardManager = {
 	this.cardsById[id].draw();
 
     },
-
-    setNumcardsInHands : function(NumCardsForPlayer0, NumCardsForPlayer1)
-    {
-	this.numcards_in_my_hand = NumCardsForPlayer0;
-	this.numcards_in_his_hand = NumCardsForPlayer1;
-
-    },  //Used when refreshing the view for a new spectator
 
     startWaiting : function(reason)
     {

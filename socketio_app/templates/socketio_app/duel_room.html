@@ -58,10 +58,6 @@ $(document).ready(function(){
 		CardManager.createCard(msg.zone, false, msg.rotation, msg.imgpath, msg.player, msg.cardid);
 	});
 	
-	//socket.on('set_numcards_in_hands', function(msg) { //Used when refreshing the view for a new spectator
-	//	CardManager.setNumcardsInHands(msg["0_Hand_numcards"],  msg["1_Hand_numcards"]);
-	//});
-
 	socket.on('create_cards_in_hand_spectator', function(msg) {
 		CardManager.createCardsInHandForSpectator(msg.player, msg.cardids, msg.imgpaths);
 	});
