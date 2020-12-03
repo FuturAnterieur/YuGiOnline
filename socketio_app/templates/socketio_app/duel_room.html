@@ -17,13 +17,14 @@ canvas {
 <script type="text/javascript" src="{% static 'socketio_app/scripts/PhaseButton.js' %}"></script>
 <script type="text/javascript" charset="utf-8">
 
-
-var QuestionCodes = {'choose_position' : 'Summon monster : choose its position.'} 
-
-
 function getImageFullPath(path)
 {
     return "{% static 'socketio_app/images/' %}" + path;
+}
+
+function getIndexPath()
+{
+    return "{% url 'socketio_app:index' %}";
 }
 
 
@@ -58,8 +59,7 @@ $(document).ready(function(){
 	});
 	
 	socket.on('set_numcards_in_hands', function(msg) { //Used when refreshing the view for a new spectator
-		CardManager.numcards_in_my_hand = msg["0_Hand_numcards"];
-		CardManager.numcards_in_his_hand = msg["1_Hand_numcards"];
+		CardManager.setNumcardsInHands(msg["0_Hand_numcards"],  msg["1_Hand_numcards"]);
 	});
 
 	socket.on('move_card', function(msg) {
@@ -92,84 +92,22 @@ $(document).ready(function(){
 	});
 
 	socket.on('start_waiting', function(msg) {
-		CardManager.cachedClickMode = CardManager.clickMode;
-		CardManager.clickMode = -1;
-		$("#message").text(msg.reason + " : waiting for other player to respond.");
-		$("#choice_buttons").html("");
+		CardManager.startWaiting(msg.reason);
 	});
 
 	socket.on('stop_waiting', function(msg) {
-		CardManager.clickMode = CardManager.cachedClickMode;
-		$('#message').text("");
+		CardManager.stopWaiting();
 	});
 
 	socket.on('ask_question', function(msg) {
-		CardManager.cachedClickMode = CardManager.clickMode;
-		CardManager.clickMode = -1;
-	
-		parts = msg.question.split(":");
-		if (parts[0] == "response_window")
-		{
-		     $("#message").text(parts[1] + " : do you wish to respond?");
-		}
-		else
-		{
-		     $("#message").text(QuestionCodes[parts[0]]);
-		}
-		
-		if (msg.choices.length < 2)
-		{
-			CardManager.question = msg.question;
-			CardManager.only_choice = msg.choices[0];
-			var cur_waiter = setTimeout(function () { 
-		 		console.log('wait complete');
-		 		CardManager.sendAnswer(CardManager.question, CardManager.only_choice); 
-	     		}, 1000);
-		}
-		else
-		{
-			html_buttons = "";
-			for(var i = 0; i < msg.choices.length; i++)
-			{
-				cur_button = "<button id=\"" + "btn" + i + "\">" + msg.choices[i] + "</button>";
-				html_buttons = html_buttons + cur_button;
-			}
-			$("#choice_buttons").html(html_buttons);
-			for(var i = 0; i < msg.choices.length; i++)
-			{
-			    $("#btn" + i).click(function() {
-				CardManager.sendAnswer(msg.question, $(this).text() );
-			    });
-			}
-		}
+		CardManager.askQuestion(msg.question, msg.choices);
 	});
 	socket.on('choose_next_phase', function(msg) {
-		CardManager.clickMode = 3;
-		$("#message").text("Choose the next phase");
-	
+		CardManager.chooseNextPhase();
 	});
 			       
 	socket.on('multiple_action_window', function(msg) {
-	    CardManager.cachedClickMode = 0;
-            CardManager.clickMode = 0;
-	    
-		if (msg.possible_cards.length > 0)
-		{
-
-	   	 	$("#message").text(msg.current_phase_or_step + " : Launch actions");
-	    		button_html = "<button id=\"Pass\">Pass</button>";
-	    		$("#choice_buttons").html(button_html);
-	    		$("#Pass").click(function() {
-				CardManager.passAction();
-			});
-		}
-		else
-		{
-			$("#message").text(msg.current_phase_or_step + " : No action possible");
-			var cur_waiter = setTimeout(function () { 
-		 		CardManager.passAction(); 
-	     		}, 1000);
-		}      	
+	    CardManager.multipleActionWindow(msg.possible_cards, msg.current_phase_or_step);
 	});
 
 	socket.on('change_LP', function(msg) {
@@ -178,23 +116,8 @@ $(document).ready(function(){
 	});
 
 	socket.on('end_duel', function(msg) {
-		CardManager.clickMode = -1;
-		var endstr = "The duel ended";
-		if (msg.winner != "DRAW")
-		{
-		    endstr += ". The winner was " + msg.winner + ".";
-		}
-		else 
-		{
-		    endstr += " in a draw.";
-		}
-		$("#message").text(endstr);
-		button_html = "<a href=\"{% url 'socketio_app:index' %}\">Leave the duel room</a>";
-		$("#choice_buttons").html(button_html);
-		
+             CardManager.endDuel(msg.winner);	
 	});
-
-	
 });
 
 </script>

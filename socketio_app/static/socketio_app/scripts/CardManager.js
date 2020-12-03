@@ -30,6 +30,8 @@ var CardManager = {
 	this.zoneWidth = 70;
 	this.zoneHeight = 92;
 	
+	this.QuestionCodes = {'choose_position' : 'Summon monster : choose its position.'};
+
 	this.phaseButtons = [new PhaseButton('draw_phase', 'DP', 200, 285), 
 				new PhaseButton('standby_phase', 'SP', 300, 285),
 				new PhaseButton('main_phase_1', 'MP1', 400, 285),
@@ -761,6 +763,69 @@ var CardManager = {
 
     },
 
+    setNumcardsInHands : function(NumCardsForPlayer0, NumCardsForPlayer1)
+    {
+	this.numcards_in_my_hand = NumCardsForPlayer0;
+	this.numcards_in_his_hand = NumCardsForPlayer1;
+
+    },  //Used when refreshing the view for a new spectator
+
+    startWaiting : function(reason)
+    {
+	this.cachedClickMode = this.clickMode;
+	this.clickMode = -1;
+	$("#message").text(reason + " : waiting for other player to respond.");
+	$("#choice_buttons").html("");
+    },
+
+    stopWaiting : function()
+    {
+	this.clickMode = this.cachedClickMode;
+	$('#message').text("");
+    },
+
+    askQuestion : function(question, choices)
+    {
+         this.cachedClickMode = this.clickMode;
+	this.clickMode = -1;
+	
+	parts = question.split(":");
+	if (parts[0] == "response_window")
+	{
+		$("#message").text(parts[1] + " : do you wish to respond?");
+	}
+	else
+	{
+		$("#message").text(this.QuestionCodes[parts[0]]);
+	}
+		
+	if (choices.length < 2)
+	{
+		this.question = question;
+		this.only_choice = choices[0];
+		var cur_waiter = setTimeout(function () { 
+		 	console.log('wait complete');
+		 	CardManager.sendAnswer(CardManager.question, CardManager.only_choice); 
+	     	}, 1000);
+	}
+	else
+	{
+		var html_buttons = "";
+		for(var i = 0; i < choices.length; i++)
+		{
+			var cur_button = "<button id=\"" + "btn" + i + "\">" + choices[i] + "</button>";
+			html_buttons = html_buttons + cur_button;
+		}
+		$("#choice_buttons").html(html_buttons);
+		for(var i = 0; i < choices.length; i++)
+		{
+		     $("#btn" + i).click(function() {
+			CardManager.sendAnswer(question, $(this).text() );
+		     });	
+		}
+	}	
+    },
+
     sendAnswer : function(question_code, chosen_button)
     {
 	this.socket.emit('send_answer', {pnum: this.clientNo, duelid: this.duelid, question: question_code, answer: chosen_button });
@@ -771,6 +836,31 @@ var CardManager = {
 	$('#choice_buttons').html("");
 
     },
+
+    multipleActionWindow : function(possible_cards, current_phase_or_step)
+    {
+	this.cachedClickMode = 0;
+        this.clickMode = 0;
+	    
+	if (possible_cards.length > 0)
+	{
+	   	$("#message").text(current_phase_or_step + " : Launch actions");
+	    	var button_html = "<button id=\"Pass\">Pass</button>";
+	    	$("#choice_buttons").html(button_html);
+	    		$("#Pass").click(function() {
+				CardManager.passAction();
+		});
+	}
+	else
+	{
+		$("#message").text(current_phase_or_step + " : No action possible");
+		var cur_waiter = setTimeout(function () { 
+		 	CardManager.passAction(); 
+	     	}, 1000);
+	}      	
+    },
+
+
     passAction : function()
     {
 	this.socket.emit('pass_action',  {pnum: this.clientNo, duelid: this.duelid});
@@ -778,6 +868,13 @@ var CardManager = {
 	$('#choice_buttons').html("");
 
     },
+
+    chooseNextPhase : function ()
+    {
+	this.clickMode = 3;
+	$("#message").text("Choose the next phase");
+    },
+
     changeLP : function(player, amount)
     {
 	console.log('change_LP message with amount ' + amount);
@@ -791,5 +888,23 @@ var CardManager = {
 		 console.log('wait complete');
 		 CardManager.socket.emit('move_complete', {duelid: CardManager.duelid}); 
 	     }, 3000);
+    },
+    endDuel : function(winner)
+    {
+	this.clickMode = -1;
+	var endstr = "The duel ended";
+	if (winner != "DRAW")
+	{
+		endstr += ". The winner was " + winner + ".";
+	}
+	else 
+	{
+	        endstr += " in a draw.";
+	}
+	$("#message").text(endstr);
+	var button_html = "<a href=\"" + getIndexPath() + "\">Leave the duel room</a>";
+	$("#choice_buttons").html(button_html);
+
     }
+
 }
