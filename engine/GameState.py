@@ -502,11 +502,39 @@ class GameState:
         
 
     def refresh_view(self, spectator_id):
-        self.sio.emit('set_numcards_in_hands', {'0_Hand_numcards': len(self.yugi.hand.cards), 
-                                            '1_Hand_numcards' : len(self.kaiba.hand.cards)}, 
-                                room="duel" + str(self.duel_id) + "_spectator" + str(spectator_id) + "_info")
+        #self.sio.emit('set_numcards_in_hands', {'0_Hand_numcards': len(self.yugi.hand.cards), 
+           #                                 '1_Hand_numcards' : len(self.kaiba.hand.cards)}, 
+           #                     room="duel" + str(self.duel_id) + "_spectator" + str(spectator_id) + "_info")
+
+        cards_in_yugi_hand = []
+        cards_in_kaiba_hand = []
+        cards_on_field = []
+
+        ciyh_ids = []
+        ciyh_paths = []
+
+        cikh_ids = []
+        cikh_paths = []
 
         for card in self.cards_in_play:
+            if card.zone.name == "0_Hand":
+                cards_in_yugi_hand.append(card)
+                ciyh_ids.append(str(card.ID))
+                ciyh_paths.append(card.imgpath)
+            elif card.zone.name == "1_Hand":
+                cards_in_kaiba_hand.append(card)
+                cikh_ids.append(str(card.ID))
+                cikh_paths.append(card.imgpath)
+            else:
+                cards_on_field.append(card)
+
+        self.sio.emit('create_cards_in_hand_spectator', {'player' : str(self.yugi.player_id), 'cardids' : ciyh_ids, 'imgpaths' : ciyh_paths},
+                    room="duel" + str(self.duel_id) + "_spectator" + str(spectator_id) + "_info")
+
+        self.sio.emit('create_cards_in_hand_spectator', {'player' : str(self.kaiba.player_id), 'cardids' : cikh_ids, 'imgpaths' : cikh_paths},
+                    room="duel" + str(self.duel_id) + "_spectator" + str(spectator_id) + "_info")
+
+        for card in cards_on_field:
             rotation = "Vertical"
             if card.__class__.__name__ == "MonsterCard":
                 if card.position == "DEF":

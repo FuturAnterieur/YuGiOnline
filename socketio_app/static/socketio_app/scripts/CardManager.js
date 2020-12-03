@@ -410,18 +410,61 @@ var CardManager = {
 	}
     },
     
+    createCardsInHandForSpectator : function(ownerNo, ids, imgsrcs)
+	{
+		var whichHand;
+		if (ownerNo == this.perspectiveNo)
+		{
+		     whichHand = "my";
+		}
+		else
+		{
+		     whichHand = "his";
+		}
+		console.log("Creating cards in player " + ownerNo + "'s hand")
+
+		for(var i = 0; i < ids.length; i++)
+		{
+			
+			var coords;
+			coords = this.getCardInHandPos(whichHand, ids.length, i);
+			newcard = new Card(ownerNo + '_Hand', coords, true, "Vertical", imgsrcs[i], this, ownerNo, ids[i], this.cards.length)
+			this.cards.push(newcard);
+			this.cardsById[ids[i]] = newcard;
+			newcard.indexInHand = this.cardsInHands[whichHand].length;
+			this.cardsInHands[whichHand].push(newcard);
+
+			this.setOnLoadFunc(ids[i]);
+		}
+		
+
+	},
+
+    setOnLoadFunc : function(id)
+    {
+	this.cardsById[id].recto.onload = function()
+	{
+	     CardManager.cardsById[id].draw();
+	}
+    },
+	
     createCard : function(zoneId, face_up, rotation, imgsrc, ownerNo, id)
     {
 	console.log('card ' + id + ' created at ' + zoneId);
-	
-	newcard = new Card(zoneId, face_up, rotation, imgsrc, CardManager, ownerNo, id, this.cards.length);
+	var coords; 
+	var zone = this.getZone(zoneId);
+        coords = new Coords(zone.x, zone.y);
+
+	newcard = new Card(zoneId, coords, face_up, rotation, imgsrc, CardManager, ownerNo, id, this.cards.length);
 	this.cards.push(newcard);
 	this.cardsById[id] = newcard;
 	
-	this.cardsById[id].recto.onload = function() 
-	{
-	    CardManager.cardsById[id].draw();
-	}
+	this.setOnLoadFunc(id);
+
+	//this.cardsById[id].recto.onload = function() 
+	//{
+	  //  CardManager.cardsById[id].draw();
+	//}
     },
 
     changeCardVisibility : function(id, visibility)
