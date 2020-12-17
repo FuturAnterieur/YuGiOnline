@@ -110,7 +110,6 @@ def clear_in_timing_category(gamestate, category):
     gamestate.events_in_timing[category].clear()
 
 def refresh_in_timing_ss1_respond_events(gamestate):
-    
     for event in gamestate.respond_events:
         if event.category == "OSS1" or event.category == "MSS1": 
             #a spell speed test would be trivial, since refresh_in_timing_ss1 is only called before the building of a SEGOC chain
@@ -184,7 +183,6 @@ def clear_in_timing_optional_fast_respond_events(gamestate):
 
 def refresh_in_timing_respond_OFast_LRA(gamestate):
 
-    clear_in_timing_respond_OFast_LRA(gamestate)
     for event in gamestate.respond_events:
         if event.category == "OFast": 
             #the spell speed and targeting eligibility conditions will be checked in the 
@@ -196,7 +194,6 @@ def refresh_in_timing_respond_OFast_LRA(gamestate):
 
 def refresh_in_timing_respond_OFast_CL(gamestate):
 
-    clear_in_timing_respond_OFast_CL(gamestate)
     for event in gamestate.respond_events:
         if event.category == "OFast": 
             if len(gamestate.chainlinks) > 0:
@@ -212,9 +209,7 @@ def clear_in_timing_respond_OFast_CL(gamestate):
 
 
 def refresh_in_timing_optional_fast_trigger_events(gamestate):
-    clear_in_timing_optional_fast_trigger_events(gamestate)
-    #it's important to clear them beforehand so that the optional fast trigger events 
-    #that were in_timing in the previous chain are not in_timing in the new one.
+    
     for category in ['OFastTP', 'OFastOP']:
         for event in gamestate.saved_trigger_events[category]:
             gamestate.events_in_timing["trigger_OFast"].append(event)
@@ -842,6 +837,7 @@ class OpenWindowForResponse(HaltableStep):
         waiting_player = responding_player.other
 
         #check if responding player can play something first
+        clear_in_timing_respond_OFast_CL(gamestate)
         refresh_in_timing_respond_OFast_CL(gamestate)
 
         gamestate.refresh_available_choices(responding_player)
@@ -883,6 +879,9 @@ class OpenWindowForExclusiveResponse(HaltableStep):
         action_to_match = self.args[self.atman]
 
         cards_to_check = []
+        
+        clear_in_timing_respond_Oexclusive(gamestate) 
+        #these will be cleared at the closing of the window but I added a clear here just to be sure
         for event in gamestate.respond_events:
             #the spell speed and targeting eligibility conditions will be checked in the 
             #event's effect's reqs

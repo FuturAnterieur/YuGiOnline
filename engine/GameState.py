@@ -328,7 +328,7 @@ class GameState:
             if stepname == "OpenWindowForResponse":
                 engine.HaltableStep.clear_in_timing_respond_OFast_CL(self)
             elif stepname == "OpenWindowForExclusiveResponse":
-                engine.HaltableStep.clear_in_timing_respond_Oexlcusive(self)
+                engine.HaltableStep.clear_in_timing_respond_Oexclusive(self)
 
             waiting_player = self.player_to_stop_waiting_when_run_action
             self.sio.emit('stop_waiting', {}, room =  "duel" + str(self.duel_id) + "_player" + str(waiting_player.player_id) + "_info")

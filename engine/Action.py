@@ -153,23 +153,29 @@ class RunEvents(Action): #this function will always be ran at the end of a chain
         if (self.at_end_of_events):
             gamestate.outer_action_stack_level += 1
 
+        engine.HaltableStep.clear_in_timing_optional_fast_trigger_events(gamestate)
+        #it's important to clear them beforehand so that the optional fast trigger events 
+        #that were in_timing in the previous chain are not in_timing in the new one.
         engine.HaltableStep.refresh_in_timing_optional_fast_trigger_events(gamestate) 
+        engine.HaltableStep.clear_in_timing_respond_OFast_LRA(gamestate)
         engine.HaltableStep.refresh_in_timing_respond_OFast_LRA(gamestate)
        
         engine.HaltableStep.refresh_SEGOC_events(gamestate)
         
-        #respond_OFast and optional fast triggers won't be put on the SEGOC chain, but they can be chained afterwards
+        #respond_OFast (like Trap Hole) and optional fast triggers (like That Wacky Alchemy) 
+        #won't be put on the SEGOC chain, but they can be chained afterwards
         #(either on top of the SEGOC effects or by starting a chain of their own if no SEGOC chain is formed)
 
         #Hence, their associated action's reqs will be checked at the time of checking which actions can be chained
         #at each point in the chain link.
 
         #in contrast, SEGOC events don't have a chance to get their reqs checked at the time of being put 
-        #in the SEGOC list, so their reqs need to be checked in the following functions.
+        #in the SEGOC list, so their reqs need to be checked in the following line.
 
-        list_of_steps = []
-        
         engine.HaltableStep.refresh_SEGOC_events_meeting_reqs(gamestate)
+        
+        list_of_steps = []
+
 
         for trigger in gamestate.events_meeting_reqs['trigger_MSS1TP'] + gamestate.events_meeting_reqs['respond_MSS1TP']:
             #if there is more than one trigger in a category and we are building a SEGOC chain, 
@@ -197,14 +203,16 @@ class RunEvents(Action): #this function will always be ran at the end of a chain
         #then run the chain
         
         #at the end I do something almost equivalent to RunResponseWindows, but without engine.HaltableStep.ProcessMandatoryRespondEvents(self),
-        #since those will only have an effect if there is already something in the gamestate.chainlinks stack and there is nothing
+        #since those will only have an effect if there is already something in the gamestate.chainlinks stack and, in our case here, there is nothing
         #in the SEGOC triggers_to_run container.
 
         #well, according to how those MandatoryRespondEvents seem to work up to now, at least.
         #I don't know if they can be activated in response to LastResolvedActions too.
 
         list_of_steps.extend([engine.HaltableStep.ClearSEGOCInTimingEvents(self),
-                                engine.HaltableStep.ClearSavedTriggerEvents(self),  #we don't need those anymore
+                                #we don't need those, they were all transferred to triggers_to_run (if there were any)
+                                engine.HaltableStep.ClearSavedTriggerEvents(self), 
+                                #we don't need those too, they were all transferred to events_in_timing
                                 engine.HaltableStep.RunStepIfElseCondition(self, 
                                         engine.HaltableStep.LaunchTTR(self),
                                         engine.HaltableStep.InitAndRunAction(self, RunOptionalResponseWindows, 'turnplayer', 'for_what_event'),
@@ -218,7 +226,7 @@ class RunEvents(Action): #this function will always be ran at the end of a chain
         if (self.at_end_of_events):
             list_of_steps.append(engine.HaltableStep.LowerOuterActionStackLevel(self))
         
-        #the same structure of If-Else LaunchTTR vs RunResponseWindows can be used inside the Actions that constitute chain links
+        #the same structure of If-Else LaunchTTR vs RunOptionalResponseWindows can be used inside the Actions that constitute chain links
 
         #this will call the run of the first action in the triggers_to_run list
 
@@ -622,7 +630,7 @@ class FlipMonsterFaceUp(Action):
         #in a battle situation,
         #the RunImmediateEvents will add an if-trigger that triggers at AfterDamageCalculation
 
-        #so a flip trigger's category is 'if' (either mandatory or optional), but it goes in the gamestate.flip_triggers container.
+        #so a flip trigger's category is 'if' (either mandatory or optional), but it goes in the gamestate.flip_events container.
         
         self.run_steps(gamestate, list_of_steps)
 
